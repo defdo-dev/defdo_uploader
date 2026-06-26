@@ -10,6 +10,7 @@ defmodule Defdo.Uploader.MixProject do
       version: version(),
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
+      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       description: description(),
       package: package(),
@@ -21,6 +22,9 @@ defmodule Defdo.Uploader.MixProject do
     [extra_applications: [:logger]]
   end
 
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
   defp version do
     File.read!("VERSION") |> String.trim()
   end
@@ -28,20 +32,20 @@ defmodule Defdo.Uploader.MixProject do
   defp deps do
     [
       {:req, "~> 0.5"},
-      {:req_s3, "~> 0.4"},
+      {:req_s3, "~> 0.2"},
       # Optional — tenancy
       {:defdo_tenant, "~> 0.10", optional: true, organization: @organization},
       # Optional — encrypted credential storage
       {:defdo_vault, "~> 0.9", optional: true, organization: @organization},
       # Optional — tenant-aware PubSub
       {:defdo_tenant_boundary, "~> 0.2", optional: true, organization: @organization},
-      # Optional — LiveComponent form
+      # Optional — LiveComponent form (used in test/support)
       {:phoenix_live_view, ">= 1.0.0", optional: true},
       # Dev / Test
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:floki, ">= 0.36.0", only: :test},
-      {:phoenix_live_view, ">= 1.0.0", only: :test, override: true}
+      {:lazy_html, ">= 0.1.0", only: :test}
     ]
   end
 

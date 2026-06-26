@@ -1,0 +1,10 @@
+# Build artifacts
+/_build/
+/deps/
+
+# Lockfile (not committed for libraries)
+mix.lock
+
+# Erlang
+erl_crash.dump
+*.ez

@@ -42,14 +42,13 @@ defmodule Defdo.Uploader.CredentialsForm do
   @impl true
   def update(%{tenant_id: tenant_id} = assigns, socket) do
     creds = load_creds(tenant_id)
-    config = build_config(creds)
 
     {:ok,
      socket
      |> assign(assigns)
-     |> assign(:config, config)
      |> assign(:creds, creds)
      |> assign(:form, to_form(changeset(creds), as: "creds"))
+     |> assign(:test_result, nil)
      |> assign(:testing?, false)
      |> assign(:saving?, false)
      |> maybe_subscribe(tenant_id)}
@@ -93,11 +92,10 @@ defmodule Defdo.Uploader.CredentialsForm do
     end
   end
 
-  @impl true
   def handle_info({:test_connection, attrs}, socket) do
     result =
-      case S3.validate_credentials(attrs) do
-        {:ok, info} -> {:ok, info}
+      case S3.validate_config(attrs) do
+        :ok -> {:ok, %{}}
         {:error, reason} -> {:error, reason}
       end
 
@@ -130,20 +128,64 @@ defmodule Defdo.Uploader.CredentialsForm do
         <% end %>
       </div>
 
-      <form phx-change="validate" phx-submit="save" phx-target={@myself}>
-        <.input field={@form[:access_key_id]} label="Access Key ID" />
-        <.input field={@form[:secret_access_key]} label="Secret Access Key" type="password" />
-        <.input field={@form[:bucket]} label="Bucket" />
-        <.input field={@form[:region]} label="Region" />
-        <.input field={@form[:endpoint]} label="Endpoint URL" />
+      <form id="creds-form" phx-change="validate" phx-submit="save" phx-target={@myself}>
+        <div class="space-y-4">
+          <div>
+            <label for="creds_access_key_id" class="block text-sm font-medium">Access Key ID</label>
+            <input
+              type="text" name="creds[access_key_id]" id="creds_access_key_id"
+              value={@form[:access_key_id].value}
+              class="mt-1 block w-full rounded-md border px-3 py-2"
+            />
+          </div>
+          <div>
+            <label for="creds_secret_access_key" class="block text-sm font-medium">Secret Access Key</label>
+            <input
+              type="password" name="creds[secret_access_key]" id="creds_secret_access_key"
+              value={@form[:secret_access_key].value}
+              class="mt-1 block w-full rounded-md border px-3 py-2"
+            />
+          </div>
+          <div>
+            <label for="creds_bucket" class="block text-sm font-medium">Bucket</label>
+            <input
+              type="text" name="creds[bucket]" id="creds_bucket"
+              value={@form[:bucket].value}
+              class="mt-1 block w-full rounded-md border px-3 py-2"
+            />
+          </div>
+          <div>
+            <label for="creds_region" class="block text-sm font-medium">Region</label>
+            <input
+              type="text" name="creds[region]" id="creds_region"
+              value={@form[:region].value}
+              class="mt-1 block w-full rounded-md border px-3 py-2"
+            />
+          </div>
+          <div>
+            <label for="creds_endpoint" class="block text-sm font-medium">Endpoint URL</label>
+            <input
+              type="text" name="creds[endpoint]" id="creds_endpoint"
+              value={@form[:endpoint].value}
+              class="mt-1 block w-full rounded-md border px-3 py-2"
+              placeholder="https://..."
+            />
+          </div>
+        </div>
 
         <div class="mt-4 flex gap-3">
-          <.button type="button" phx-click="test" phx-target={@myself} disabled={@testing?}>
+          <button
+            type="button" phx-click="test" phx-target={@myself} disabled={@testing?}
+            class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+          >
             <%= if @testing?, do: "Testing...", else: "Test Connection" %>
-          </.button>
-          <.button type="submit" disabled={@saving?}>
+          </button>
+          <button
+            type="submit" disabled={@saving?}
+            class="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+          >
             <%= if @saving?, do: "Saving...", else: "Save Credentials" %>
-          </.button>
+          </button>
         </div>
       </form>
     </div>

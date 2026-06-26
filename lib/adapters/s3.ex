@@ -209,18 +209,6 @@ defmodule Defdo.Uploader.Adapters.S3 do
 
   # ── Private helpers ──────────────────────────────────────────────────
 
-  defp test_put(client, bucket, bucket_with_prefix) do
-    {_bucket, prefix} = bucket_and_prefix(bucket_with_prefix)
-    key = Path.join(Enum.reject([prefix, "defdo_theme_hub_test.txt"], &is_nil/1))
-    body = "defdo_theme_hub connectivity test at #{DateTime.utc_now()}"
-
-    case Req.put(client, url: "s3://#{bucket}/#{key}", body: body) do
-      {:ok, _resp} -> {:ok, %{test_key: key}}
-      {:error, reason} -> {:error, reason}
-      other -> {:error, other}
-    end
-  end
-
   defp fetch_body(url) when is_binary(url) do
     uri = URI.parse(url)
 
@@ -293,13 +281,6 @@ defmodule Defdo.Uploader.Adapters.S3 do
       {:ok, body} -> {:ok, body, MIME.from_path(path)}
       other -> other
     end
-  end
-
-  defp build_s3_url(bucket, key, nil), do: "https://#{bucket}.s3.amazonaws.com/#{key}"
-
-  defp build_s3_url(bucket, key, endpoint) do
-    endpoint = String.trim_trailing(endpoint, "/")
-    "#{endpoint}/#{bucket}/#{key}"
   end
 
   defp normalize_endpoint(endpoint) when is_binary(endpoint) do

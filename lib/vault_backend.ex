@@ -30,6 +30,8 @@ defmodule Defdo.Uploader.VaultBackend do
     "endpoint" => :endpoint
   }
 
+  alias Defdo.Tenant.Context
+
   @impl true
   def put(creds, opts) when is_map(creds) do
     with {:ok, tenant_id} <- ensure_tenant(opts),
@@ -93,8 +95,8 @@ defmodule Defdo.Uploader.VaultBackend do
   end
 
   defp tenant_from_context do
-    if Code.ensure_loaded?(Defdo.Tenant.Context) do
-      Defdo.Tenant.Context.tenant_id()
+    if Code.ensure_loaded?(Context) do
+      Context.tenant_id()
     end
   end
 
