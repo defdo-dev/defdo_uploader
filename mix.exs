@@ -54,7 +54,8 @@ defmodule Defdo.Uploader.MixProject do
       licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => @repo_url,
-        "Changelog" => "#{@repo_url}/blob/main/CHANGELOG.md"
+        "Changelog" => "#{@repo_url}/blob/main/CHANGELOG.md",
+        "Architecture" => "#{@repo_url}/blob/main/docs/architecture.md"
       }
     ]
   end
@@ -62,7 +63,10 @@ defmodule Defdo.Uploader.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md", "CHANGELOG.md"]
+      extras: ["README.md", "CHANGELOG.md", "docs/architecture.md"],
+      groups_for_extras: [
+        Guides: ~r{^docs/}
+      ]
     ]
   end
 end
