@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 — 2026-06-26
+
+- Fix: include `VERSION` file in Hex package so `mix.exs` can read it at
+  compile time.
+
 ## 0.1.0 — 2026-06-26
 
 - Initial release.

@@ -58,6 +58,7 @@ defmodule Defdo.Uploader.MixProject do
     [
       organization: @organization,
       licenses: ["Apache-2.0"],
+      files: ~w(lib .formatter.exs mix.exs VERSION README.md CHANGELOG.md),
       links: %{
         "GitHub" => @repo_url,
         "Changelog" => "#{@repo_url}/blob/main/CHANGELOG.md",
