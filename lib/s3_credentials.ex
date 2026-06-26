@@ -35,6 +35,6 @@ defmodule Defdo.Uploader.S3Credentials do
   def present?(opts \\ []), do: backend().present?(opts)
 
   defp backend do
-    Application.get_env(:defdo_uploader, :credentials_backend, DefaultBackend)
+    Application.get_env(:defdo_uploader, :credentials_backend, Defdo.Uploader.DefaultBackend)
   end
 end
