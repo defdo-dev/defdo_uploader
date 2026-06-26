@@ -39,7 +39,9 @@ defmodule Defdo.Uploader.MixProject do
       {:phoenix_live_view, ">= 1.0.0", optional: true},
       # Dev / Test
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:floki, ">= 0.36.0", only: :test},
+      {:phoenix_live_view, ">= 1.0.0", only: :test, override: true}
     ]
   end
 
