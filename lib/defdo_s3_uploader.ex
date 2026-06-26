@@ -1,10 +1,10 @@
-defmodule Defdo.S3Uploader do
+defmodule Defdo.Uploader do
   @moduledoc """
   S3 operations, vault-backed credentials, and embeddable admin form.
 
   ## Architecture
 
-  `defdo_s3_uploader` works at three levels depending on which optional
+  `defdo_uploader` works at three levels depending on which optional
   dependencies are available:
 
   ### Level 1 — S3 only (no defdo_tenant, no vault)
@@ -24,7 +24,7 @@ defmodule Defdo.S3Uploader do
 
   ```elixir
   # mix.exs
-  {:defdo_s3_uploader, "~> 0.1", organization: "defdo"}
+  {:defdo_uploader, "~> 0.1", organization: "defdo"}
   ```
   """
 end

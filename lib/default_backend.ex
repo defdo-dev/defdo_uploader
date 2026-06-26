@@ -1,6 +1,6 @@
-defmodule Defdo.S3Uploader.DefaultBackend do
+defmodule Defdo.Uploader.DefaultBackend do
   @moduledoc false
-  @behaviour Defdo.S3Uploader.CredentialsBackend
+  @behaviour Defdo.Uploader.CredentialsBackend
 
   @impl true
   def put(_creds, _opts), do: {:error, :no_backend_configured}

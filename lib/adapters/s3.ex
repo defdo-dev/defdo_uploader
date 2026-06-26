@@ -1,11 +1,10 @@
-defmodule Defdo.S3Uploader.Client do
+defmodule Defdo.Uploader.Adapters.S3 do
   @moduledoc """
-  Low-level S3/R2/MinIO operations using req_s3.
+  S3/R2/MinIO adapter using req_s3.
 
-  Provides upload, delete, head, and validation primitives with no
-  project or tenant knowledge. Reusable across defdo_cms,
-  defdo_notification_hub, and any package that needs S3 storage.
+  Implements `Defdo.Uploader.Adapter` for S3-compatible storage.
   """
+  @behaviour Defdo.Uploader.Adapter
 
   require Logger
   alias Req.Response
@@ -347,4 +346,18 @@ defmodule Defdo.S3Uploader.Client do
         end
     end
   end
+
+  # ── Adapter callbacks (delegating to existing public API) ──────────
+
+  @impl Defdo.Uploader.Adapter
+  def upload(source, key, config, _opts), do: upload_file(source, key, config)
+
+  @impl Defdo.Uploader.Adapter
+  def head(key, config, _opts), do: head_object(key, config)
+
+  @impl Defdo.Uploader.Adapter
+  def delete(key, config, _opts), do: delete_object(key, config)
+
+  @impl Defdo.Uploader.Adapter
+  def public_url(bucket, key, config, _opts), do: build_public_url(bucket, key, config[:endpoint])
 end

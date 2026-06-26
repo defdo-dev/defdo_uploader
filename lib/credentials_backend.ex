@@ -1,4 +1,4 @@
-defmodule Defdo.S3Uploader.CredentialsBackend do
+defmodule Defdo.Uploader.CredentialsBackend do
   @moduledoc """
   Behaviour for S3 credential storage backends.
 

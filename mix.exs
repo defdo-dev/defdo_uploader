@@ -1,12 +1,12 @@
-defmodule Defdo.S3Uploader.MixProject do
+defmodule Defdo.Uploader.MixProject do
   use Mix.Project
 
   @organization "defdo"
-  @repo_url "https://github.com/defdo-dev/defdo_s3_uploader"
+  @repo_url "https://github.com/defdo-dev/defdo_uploader"
 
   def project do
     [
-      app: :defdo_s3_uploader,
+      app: :defdo_uploader,
       version: version(),
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
