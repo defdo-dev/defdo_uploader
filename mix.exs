@@ -32,7 +32,7 @@ defmodule Defdo.Uploader.MixProject do
   defp deps do
     [
       {:req, "~> 0.5 or ~> 0.6"},
-      {:req_s3, "~> 0.2"},
+      {:req_s3, github: "wojtekmach/req_s3", override: true},
       # Optional — tenancy
       {:defdo_tenant, "~> 0.10", optional: true, organization: @organization},
       # Optional — encrypted credential storage
