@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — 2026-06-30
+
+- deps: switch `req_s3` to `defdo_s3 ~> 0.1.0`
+
 ## 0.1.2 — 2026-06-30
 
 - Switch `req_s3` to GitHub ref for `req ~> 0.6` support.
