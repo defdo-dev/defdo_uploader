@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 — 2026-06-30
+
+- Switch `req_s3` to GitHub ref for `req ~> 0.6` support.
+- Relax `req` to `~> 0.5 or ~> 0.6`.
+
 ## 0.1.1 — 2026-06-26
 
 - Fix: include `VERSION` file in Hex package so `mix.exs` can read it at
