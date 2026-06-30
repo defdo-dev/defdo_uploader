@@ -31,7 +31,7 @@ defmodule Defdo.Uploader.MixProject do
 
   defp deps do
     [
-      {:req, "~> 0.5"},
+      {:req, "~> 0.5 or ~> 0.6"},
       {:req_s3, "~> 0.2"},
       # Optional — tenancy
       {:defdo_tenant, "~> 0.10", optional: true, organization: @organization},
