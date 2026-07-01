@@ -1,6 +1,6 @@
 defmodule Defdo.Uploader.Adapters.S3 do
   @moduledoc """
-  S3/R2/MinIO adapter using req_s3.
+  S3/R2/MinIO adapter using defdo_s3.
 
   Implements `Defdo.Uploader.Adapter` for S3-compatible storage.
   """
@@ -8,7 +8,7 @@ defmodule Defdo.Uploader.Adapters.S3 do
 
   require Logger
   alias Req.Response
-  alias ReqS3
+  alias Defdo.S3
 
   @type creds :: %{
           required(:access_key_id) => String.t(),
@@ -264,7 +264,7 @@ defmodule Defdo.Uploader.Adapters.S3 do
       |> maybe_put_endpoint(creds[:endpoint])
 
     try do
-      {:ok, ReqS3.attach(Req.new(), opts)}
+      {:ok, S3.attach(Req.new(), opts)}
     rescue
       error -> {:error, error}
     end
