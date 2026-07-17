@@ -15,14 +15,14 @@
 # Optional environment:
 #   HEX_PUBLISH_REPLACE — set to "true" to pass --replace to `mix hex.publish`
 #
-# Backend: Woodpecker LOCAL backend on the darwin/arm64 exec agent. `image:`
-# names the SHELL (bash) that runs `commands`, NOT a container — the host has the
-# Elixir/Mix toolchain in PATH. Without the platform label the tag job can land on
-# a local agent that tries to exec the image string (e.g. elixir:1.19.5) as a
-# binary and fails with `exec: "<image>": executable file not found`.
+# Runs on the docker/kubernetes agent (`platform: linux/amd64`): `image:` is a
+# real container (elixir). The label is REQUIRED — without it a tag job can land
+# on the darwin exec agent (local backend, image = host binary) and die with
+# `exec: "<image>": executable file not found`. See the `defdo-woodpecker-ci`
+# skill.
 
 labels:
-  platform: darwin/arm64
+  platform: linux/amd64
 
 when:
   - event: [push, pull_request]
@@ -37,7 +37,7 @@ steps:
   # ═══════════════════════════════════════════════════════════════════════
 
   - name: format-and-compile
-    image: bash
+    image: elixir:1.19.5
     when:
       event: [push, pull_request, cron]
     environment:
@@ -60,7 +60,7 @@ steps:
         mix compile --warnings-as-errors
 
   - name: test
-    image: bash
+    image: elixir:1.19.5
     when:
       event: [push, pull_request, cron]
     environment:
@@ -87,7 +87,7 @@ steps:
   # ═══════════════════════════════════════════════════════════════════════
 
   - name: release-validate
-    image: bash
+    image: elixir:1.19.5
     when:
       event: tag
     environment:
@@ -115,7 +115,7 @@ steps:
         MIX_ENV=dev mix hex.build
 
   - name: hex-publish
-    image: bash
+    image: elixir:1.19.5
     when:
       event: tag
     depends_on: [release-validate]
@@ -155,7 +155,7 @@ steps:
   # ═══════════════════════════════════════════════════════════════════════
 
   - name: manual-ci
-    image: bash
+    image: elixir:1.19.5
     when:
       event: manual
       evaluate: 'CI_PIPELINE_TRIGGER_MESSAGE != "publish"'
@@ -180,7 +180,7 @@ steps:
         mix test
 
   - name: manual-publish
-    image: bash
+    image: elixir:1.19.5
     when:
       event: manual
       evaluate: 'CI_PIPELINE_TRIGGER_MESSAGE == "publish"'
@@ -223,7 +223,7 @@ steps:
   # ═══════════════════════════════════════════════════════════════════════
 
   - name: deploy-publish
-    image: bash
+    image: elixir:1.19.5
     when:
       event: deployment
     environment:
