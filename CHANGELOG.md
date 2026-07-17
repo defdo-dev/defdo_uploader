@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4 — 2026-07-17
+
+- deps: bump `defdo_vault` to 0.10.0, `defdo_tenant` to 0.10.3,
+  `defdo_tenant_boundary` to 0.2.3, `phoenix_live_view` to 1.2.7, and `req` to
+  0.6.3 (hex.outdated green). Compile + tests green.
+
 ## 0.1.3 — 2026-06-30
 
 - deps: switch `req_s3` to `defdo_s3 ~> 0.1.0`
