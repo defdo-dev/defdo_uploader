@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5 — 2026-07-23
+
+- deps: `defdo_vault` 0.10.1 (V10 migrator — `vault_integrations.secret_id`
+  index).
+- ci: route CI to the linux/amd64 docker agent (revert local-backend hack).
+
 ## 0.1.4 — 2026-07-17
 
 - deps: bump `defdo_vault` to 0.10.0, `defdo_tenant` to 0.10.3,
