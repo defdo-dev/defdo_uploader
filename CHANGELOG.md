@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6 — 2026-07-23
+
+- deps: adopt `defdo_vault ~> 0.10` (V10 migrator). Raises the declared
+  constraint floor from `~> 0.9`; lock stays at 0.10.1.
+
 ## 0.1.5 — 2026-07-23
 
 - deps: `defdo_vault` 0.10.1 (V10 migrator — `vault_integrations.secret_id`

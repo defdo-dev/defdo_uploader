@@ -36,7 +36,7 @@ defmodule Defdo.Uploader.MixProject do
       # Optional — tenancy
       {:defdo_tenant, "~> 0.10", optional: true, organization: @organization},
       # Optional — encrypted credential storage
-      {:defdo_vault, "~> 0.9", optional: true, organization: @organization},
+      {:defdo_vault, "~> 0.10", optional: true, organization: @organization},
       # Optional — tenant-aware PubSub
       {:defdo_tenant_boundary, "~> 0.2", optional: true, organization: @organization},
       # Optional — LiveComponent form (used in test/support)
