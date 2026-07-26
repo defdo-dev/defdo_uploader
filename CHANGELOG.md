@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.7 — 2026-07-26
+
+### Security
+
+- Cleared every advisory `mix hex.audit` reported for this package. Only locked
+  versions moved; no dependency requirement changed, so this is a drop-in
+  upgrade.
+
+### Changed
+
+- Tracks `defdo_tenant` 0.10.4, `defdo_tenant_boundary` 0.2.4 and `defdo_vault`
+  0.10.2, all security releases. `defdo_tenant` also dropped its `bypass` test
+  dependency, which kept `plug_cowboy`, `cowboy`, `cowlib` and `ranch` — a
+  second HTTP server — in the tree of anything building its test environment.
+
 ## 0.1.6 — 2026-07-23
 
 - deps: adopt `defdo_vault ~> 0.10` (V10 migrator). Raises the declared
