@@ -1,0 +1,84 @@
+# ─── defdo_uploader Woodpecker CI ──────────────────────────────────────────
+#
+# Push / pull_request / cron / manual(non-publish) path. The tag / manual
+# (publish) / deployment path lives in .woodpecker/release.yml — each file
+# in .woodpecker/ is a SEPARATE workflow with its own workspace, so the split
+# is by trigger, not by step: splitting further (e.g. compile.yml + test.yml)
+# would destroy the cache reuse below by giving each step a cold workspace.
+#
+# Global secrets (configured in Woodpecker org settings):
+#   hex_org_token — Hex organization read token
+#
+# hex_org_name is "defdo" (not sensitive) — hardcoded to avoid secret injection issues.
+#
+# Runs on the docker/kubernetes agent (`platform: linux/amd64`): `image:` is a
+# real container (elixir). The label is REQUIRED — without it a job can land
+# on the darwin exec agent (local backend, image = host binary) and die with
+# `exec: "<image>": executable file not found`. See the `defdo-woodpecker-ci`
+# skill.
+
+labels:
+  platform: linux/amd64
+
+when:
+  - event: [push, pull_request]
+    branch: main
+  - event: cron
+  - event: manual
+    evaluate: 'CI_PIPELINE_TRIGGER_MESSAGE != "publish"'
+
+# ─── Pipeline rule: compile ONCE, fan out ──────────────────────────────────
+# All steps of a workflow share the same workspace volume, so `deps/` and
+# `_build/` written by the `compile` step persist into every step that
+# `depends_on` it. Downstream steps therefore NEVER recompile — they mount the
+# warm `_build` and run their check straight away. `compile` warms BOTH envs
+# (dev for warnings-as-errors, test for the suite) so nothing after it pays a
+# compile cost. `depends_on: [compile]` also lets `format` and `test` run in
+# parallel once the single compile finishes.
+steps:
+  - name: compile
+    image: elixir:1.19.5
+    when:
+      event: [push, pull_request, cron, manual]
+    environment:
+      HEX_ORG_TOKEN:
+        from_secret: hex_org_token
+    commands:
+      - |
+        set -e
+        HEX_ORG_NAME="defdo"
+        export HEX_ORG_NAME HEX_ORG_TOKEN
+
+        mix do local.hex --force, local.rebar --force
+
+        if [ -n "$HEX_ORG_TOKEN" ]; then
+          mix hex.organization auth "$HEX_ORG_NAME" --key "$HEX_ORG_TOKEN"
+        fi
+
+        mix deps.get
+        # THE compile. Warm dev + test _build once; every dependent step
+        # reuses these artifacts via the shared workspace and never recompiles.
+        mix compile --warnings-as-errors
+        MIX_ENV=test mix compile --warnings-as-errors
+
+  - name: format
+    image: elixir:1.19.5
+    when:
+      event: [push, pull_request, cron, manual]
+    depends_on: [compile]
+    commands:
+      - |
+        set -e
+        mix do local.hex --force, local.rebar --force
+        mix format --check-formatted
+
+  - name: test
+    image: elixir:1.19.5
+    when:
+      event: [push, pull_request, cron, manual]
+    depends_on: [compile]
+    commands:
+      - |
+        set -e
+        mix do local.hex --force, local.rebar --force
+        mix test
