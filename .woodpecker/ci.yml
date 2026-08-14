@@ -49,7 +49,7 @@ steps:
         HEX_ORG_NAME="defdo"
         export HEX_ORG_NAME HEX_ORG_TOKEN
 
-        mix do local.hex --force, local.rebar --force
+        mix do local.hex --force + local.rebar --force
 
         if [ -n "$HEX_ORG_TOKEN" ]; then
           mix hex.organization auth "$HEX_ORG_NAME" --key "$HEX_ORG_TOKEN"
@@ -69,7 +69,7 @@ steps:
     commands:
       - |
         set -e
-        mix do local.hex --force, local.rebar --force
+        mix do local.hex --force + local.rebar --force
         mix format --check-formatted
 
   - name: test
@@ -80,5 +80,5 @@ steps:
     commands:
       - |
         set -e
-        mix do local.hex --force, local.rebar --force
+        mix do local.hex --force + local.rebar --force
         mix test

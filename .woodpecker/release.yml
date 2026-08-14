@@ -51,7 +51,7 @@ steps:
           esac
         fi
 
-        mix do local.hex --force, local.rebar --force
+        mix do local.hex --force + local.rebar --force
 
         if [ -n "$HEX_ORG_TOKEN" ]; then
           mix hex.organization auth "$HEX_ORG_NAME" --key "$HEX_ORG_TOKEN"
@@ -78,7 +78,7 @@ steps:
         HEX_ORG_NAME="defdo"
         export HEX_API_KEY HEX_ORG_NAME HEX_ORG_TOKEN
 
-        mix do local.hex --force, local.rebar --force
+        mix do local.hex --force + local.rebar --force
 
         if [ -n "$HEX_ORG_TOKEN" ]; then
           mix hex.organization auth "$HEX_ORG_NAME" --key "$HEX_ORG_TOKEN"
