@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.2.0
+
+### Every requirement declares the line it resolves on
+
+This package was the furthest behind in the defdo_theme_hub dependency
+closure — nine requirements, and six defdo packages that moved several minors
+each while the requirements never complained.
+
+**Unbounded** — a `>=` with no ceiling accepts every version ever published:
+
+- `phoenix_live_view` `>= 1.0.0` -> `~> 1.2`
+- `ex_doc` `>= 0.0.0` -> `~> 0.40`
+- `floki` `>= 0.36.0` -> `~> 0.38`
+- `lazy_html` `>= 0.1.0` -> `~> 0.1`
+
+**Accumulated** — `req` `~> 0.5 or ~> 0.6` -> `~> 0.7`.
+
+**defdo parents**, all released today ahead of this one so these floors are
+correct on the first try rather than the second:
+
+| requirement | was | now | jump |
+|---|---|---|---|
+| `defdo_tenant` | `~> 0.10` | `~> 0.15` | 0.13.1 -> 0.15.0 |
+| `defdo_vault` | `~> 0.10` | `~> 0.14` | 0.11.0 -> 0.14.0 |
+| `defdo_tenant_boundary` | `~> 0.2` | `~> 0.4` | 0.2.7 -> 0.4.0 |
+| `defdo_s3` | `~> 0.1.0` | `~> 0.2` | 0.1.2 -> 0.2.0 |
+
+### What the verification here actually proves
+
+4 tests in a single test file. That is thin for a release that moves six defdo
+packages, so `mix compile --warnings-as-errors` was run against a forced
+rebuild as the real signal, and it is clean. The green suite is not the
+evidence; the clean compile against the new dependency set is.
+
+**Consumers must edit to follow.** `defdo_theme_hub` declares
+`defdo_uploader ~> 0.1.1` and `defdo_cms` declares `~> 0.1.3` — both
+three-segment, capping at `< 0.2.0`.
+
+`mix hex.outdated` empty. `mix deps.unlock --check-unused` clean after dropping
+`bandit` and `thousand_island`, which no requirement reached.
+
 ## 0.1.7 — 2026-07-26
 
 ### Security

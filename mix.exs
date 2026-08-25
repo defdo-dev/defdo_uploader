@@ -31,21 +31,21 @@ defmodule Defdo.Uploader.MixProject do
 
   defp deps do
     [
-      {:req, "~> 0.5 or ~> 0.6"},
-      {:defdo_s3, "~> 0.1.0", organization: @organization},
+      {:req, "~> 0.7"},
+      {:defdo_s3, "~> 0.2", organization: @organization},
       # Optional — tenancy
-      {:defdo_tenant, "~> 0.10", optional: true, organization: @organization},
+      {:defdo_tenant, "~> 0.15", optional: true, organization: @organization},
       # Optional — encrypted credential storage
-      {:defdo_vault, "~> 0.10", optional: true, organization: @organization},
+      {:defdo_vault, "~> 0.14", optional: true, organization: @organization},
       # Optional — tenant-aware PubSub
-      {:defdo_tenant_boundary, "~> 0.2", optional: true, organization: @organization},
+      {:defdo_tenant_boundary, "~> 0.4", optional: true, organization: @organization},
       # Optional — LiveComponent form (used in test/support)
-      {:phoenix_live_view, ">= 1.0.0", optional: true},
+      {:phoenix_live_view, "~> 1.2", optional: true},
       # Dev / Test
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:floki, ">= 0.36.0", only: :test},
-      {:lazy_html, ">= 0.1.0", only: :test}
+      {:floki, "~> 0.38", only: :test},
+      {:lazy_html, "~> 0.1", only: :test}
     ]
   end
 
