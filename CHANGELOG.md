@@ -1,6 +1,29 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
+
+A minor, for three reasons that each would have been enough: new public API
+(`Defdo.Uploader.Storage` and the policy modules), a behaviour change visible
+to consumers (`delete_object/2` now reports refused deletes), and two raised
+floors.
+
+### Requirement floors
+
+| requirement | was | now |
+|---|---|---|
+| `defdo_tenant` (optional) | `~> 0.15` | `~> 0.16` |
+| `defdo_vault` (optional) | `~> 0.14` | `~> 0.16` |
+
+Both were resolving 0.16.0 in every host that will adopt this release —
+defdo_auth, defdo_cms and defdo_theme already lock both — so the floor now
+states what is actually built and tested. defdo_theme_hub locks vault 0.15.1;
+its `~> 0.2` requirement admits this release, and taking it moves vault to
+0.16.0 there too. Note that 0.16.0 of defdo_vault requires Flop `~> 0.29`.
+
+**Reaches `~> 0.2` consumers without a requirement change.** A two-segment
+`~> 0.2` caps at the next major, so theme_hub, cms and my_mvno pick this
+release up on their next `mix deps.update defdo_uploader`, including the
+`delete_object/2` change below.
 
 ### Policy storage: one upload path for tenant, user and platform assets
 
