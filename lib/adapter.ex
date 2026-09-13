@@ -37,4 +37,17 @@ defmodule Defdo.Uploader.Adapter do
   @callback delete(String.t(), config(), opts()) :: :ok | {:error, term()}
 
   @callback public_url(String.t(), String.t(), config(), opts()) :: String.t()
+
+  @callback put_object(String.t(), binary(), String.t(), config(), opts()) ::
+              :ok | {:error, term()}
+
+  @callback get_object(String.t(), config()) ::
+              {:ok, %{body: binary(), content_type: String.t() | nil}} | {:error, term()}
+
+  @callback presign_get(String.t(), config(), pos_integer()) ::
+              {:ok, String.t()} | {:error, term()}
+
+  # Optional so that adapters written against 0.2 keep compiling. Policy
+  # storage (`Defdo.Uploader.Storage`) needs all three.
+  @optional_callbacks put_object: 5, get_object: 2, presign_get: 3
 end
