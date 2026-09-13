@@ -1,6 +1,41 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
+
+A minor, for three reasons that each would have been enough: new public API
+(`Defdo.Uploader.Storage` and the policy modules), a behaviour change visible
+to consumers (`delete_object/2` now reports refused deletes), and two raised
+floors.
+
+### Requirement floors
+
+| requirement | was | now |
+|---|---|---|
+| `defdo_tenant` (optional) | `~> 0.15` | `~> 0.16` |
+| `defdo_vault` (optional) | `~> 0.14` | `~> 0.16` |
+
+This package resolves and tests against 0.16.0 of both, so the floors say so.
+**That is not free for every host.** Committed locks at the time of release:
+
+| host | defdo_tenant | defdo_vault | Flop |
+|---|---|---|---|
+| defdo_theme | 0.16.0 | 0.16.0 | 0.29.0 |
+| defdo_cms | 0.16.0 | 0.15.1 | 0.29.0 |
+| defdo_auth | 0.16.0 | 0.15.1 | 0.28.0, `override: true` |
+| defdo_theme_hub | 0.16.0 | 0.15.1 | 0.28.0 |
+
+defdo_vault 0.16.0 requires Flop `~> 0.29`, and Flop 0.29 turned `Flop.Schema`
+from a protocol into a behaviour. A host still on Flop 0.28 therefore cannot
+take this release until it moves its `@derive Flop.Schema` schemas to
+`use Flop.Schema` and raises any Flop override — defdo_auth has two such
+schemas and a `~> 0.28.0` override; defdo_theme_hub also locks Flop 0.28.
+Until then the resolver keeps those hosts on 0.2.x; nothing breaks, they just
+do not receive this release.
+
+**Reaches `~> 0.2` consumers without a requirement change.** A two-segment
+`~> 0.2` caps at the next major, so theme_hub, cms and my_mvno pick this
+release up on their next `mix deps.update defdo_uploader`, including the
+`delete_object/2` change below.
 
 ### Policy storage: one upload path for tenant, user and platform assets
 
