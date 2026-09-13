@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+### The S3 adapter no longer reports a refused request as success
+
+`Req` returns `{:ok, response}` for every HTTP status, and the adapter only
+ever matched `{:ok, _}`:
+
+- **`delete_object/2`** returned `:ok` on a 403 or 500. Consumers such as
+  `ManagedProjectAssets.delete_asset` in defdo_theme_hub and
+  `ProjectAssets.delete_asset` in defdo_cms delete their database row only when
+  storage answers `:ok`, so every refused delete orphaned its object. It now
+  returns `{:error, {:http_status, status}}`; a **404 stays `:ok`**, because a
+  missing object is already the state a delete asks for.
+- **`upload_file/3`** let a refused PUT fall through to `head_object/2`. When
+  an older object already existed at that key, HEAD found it and the upload
+  reported success with the old object's metadata.
+- **`upload_one/4`** ignored the PUT status entirely.
+
+**Visible to consumers:** a delete that storage refuses now leaves the row in
+place instead of removing it. That is the point — the row is the only record
+of an object that still exists — but code that assumed delete always succeeds
+will now see the error.
+
+**Unchanged on purpose:** `upload_file/3` still ignores the prefix in a
+`"bucket/prefix"` bucket. defdo_theme_hub and defdo_cms already join the prefix
+into the object key, and their tests assert that layout; applying it here too
+would write to `prefix/prefix/...`.
+
+### The adapter has tests
+
+`client/1` merges an optional `:req_options` from the config map into the base
+request, so the adapter runs against `Req.Test` stubs with no network.
+`Adapters.S3` previously had zero tests. The four behaviour tests above were
+verified to fail against the old adapter, not merely to pass against the new
+one.
+
 ## 0.2.0
 
 ### Every requirement declares the line it resolves on
