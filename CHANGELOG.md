@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+### Policy storage: one upload path for tenant, user and platform assets
+
+`Defdo.Uploader.Storage` runs an upload through a **kind** — a policy that
+decides ownership, visibility, accepted types, size and pixel limits, and the
+variants stored. theme, cms and defdo_auth previously had no shared answer to
+any of these; each built its own keys, and nothing re-encoded what users sent.
+
+| Module | Responsibility |
+|---|---|
+| `Kind` | built-in `:tenant_logo`, `:tenant_background`, `:user_picture`, `:platform_icon`; override or add via `config :defdo_uploader, :kinds` |
+| `Guard` | size cap, type sniffed from magic bytes, SVG refused unless the kind allows it |
+| `Key` | `tenants/<tenant>/...` versioned keys; tenant from `Defdo.Tenant.Context`, explicit tenant must agree with it; segments validated against traversal |
+| `ImagePipeline` | re-encode every variant, autorotate, strip metadata, never upscale, flatten JPEG onto white, reject decompression bombs by pixel count |
+| `Storage` | `put/3` with rollback of partial writes, `url/3` public or presigned, idempotent `delete/2`, `negotiate/2` on `Accept`, `fetch_local/3` lazy hydration |
+
+**WebP, measured on real images from this estate** (quality 80–90):
+
+| Asset | Fallback | WebP | Saving |
+|---|---|---|---|
+| logo, 512px | PNG 45.8 KB | 39.7 KB | 13% |
+| photo, avatar 512 | JPEG 83.0 KB | 69.6 KB | 16% |
+| photo, background | JPEG 334.5 KB | 265.7 KB | 21% |
+| photo, background | JPEG 158.9 KB | 69.8 KB | 56% |
+| photo, avatar 512 | JPEG 25.8 KB | 13.4 KB | 48% |
+
+Web-facing kinds store WebP **and** a PNG/JPEG fallback, served by `Accept`:
+Outlook and some native apps cannot decode WebP. `:platform_icon` never
+produces WebP, because iOS app icons, `apple-touch-icon`, Play Store listings
+and favicons require PNG.
+
+**Security properties, each with a test that was verified to fail when the
+protection is removed:** SVG refused for user uploads; `..` and separators
+rejected in key segments; explicit tenant cannot override the context tenant;
+EXIF (where camera GPS lives) stripped — the test asserts the source really
+carries EXIF first; appended polyglot bytes dropped; cache paths cannot escape
+the cache directory; pixel-count cap enforced before decode.
+
+**Adapter:** `Adapters.S3` gains `put_object/5` (explicit content type and
+`Cache-Control`), `get_object/2` and `presign_get/3`. They are
+`@optional_callbacks` on `Defdo.Uploader.Adapter`, so 0.2 adapters still
+compile.
+
+**New optional dependency:** `{:image, "~> 0.72"}`. Without it
+`ImagePipeline.render/2` returns `{:error, :image_library_unavailable}` rather
+than storing an unprocessed upload.
+
+**Docs:** README and `docs/architecture.md` described a 4-arity
+`upload_file`, a `config :defdo_uploader, :adapter` key and `req_s3` — none of
+which exist. Corrected.
+
 ### The S3 adapter no longer reports a refused request as success
 
 `Req` returns `{:ok, response}` for every HTTP status, and the adapter only

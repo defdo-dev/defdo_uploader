@@ -30,13 +30,13 @@ vault-backed credential storage.
 ## Three Levels
 
 `defdo_uploader` works at three levels depending on which optional dependencies
-are available. Only `req_s3` and `req` are mandatory.
+are available. Only `defdo_s3` and `req` are mandatory; `image` is required by `Defdo.Uploader.Storage`.
 
 ### Level 1 — Raw S3 (zero dependencies)
 
 ```elixir
 # mix.exs — only this
-{:defdo_uploader, "~> 0.1", organization: "defdo"}
+{:defdo_uploader, "~> 0.3", organization: "defdo"}
 
 # Usage
 alias Defdo.Uploader.Adapters.S3
@@ -60,11 +60,12 @@ S3.build_public_url("my-bucket", "uploads/photo.jpg", "https://my-endpoint.examp
 
 ```elixir
 # mix.exs
-{:defdo_uploader, "~> 0.1", organization: "defdo"},
-{:defdo_tenant, "~> 0.10", organization: "defdo"}
+{:defdo_uploader, "~> 0.3", organization: "defdo"},
+{:defdo_tenant, "~> 0.15", organization: "defdo"}
 
 # Usage — tenant_id in opts or from process context
-S3.upload_file("photo.jpg", "uploads/photo.jpg", config, tenant_id: "tenant-abc")
+# Keys are tenant-scoped by Defdo.Uploader.Key; the tenant comes from context.
+Storage.put(:tenant_logo, bytes, config: config, id: "brand")
 
 S3Credentials.put(
   %{access_key_id: "...", secret_access_key: "..."},
@@ -78,8 +79,8 @@ S3Credentials.put(
 
 ```elixir
 # mix.exs
-{:defdo_uploader, "~> 0.1", organization: "defdo"},
-{:defdo_tenant, "~> 0.10", organization: "defdo"},
+{:defdo_uploader, "~> 0.3", organization: "defdo"},
+{:defdo_tenant, "~> 0.15", organization: "defdo"},
 {:defdo_vault, "~> 0.9", organization: "defdo"},
 {:phoenix_live_view, "~> 1.0"}
 
@@ -128,7 +129,7 @@ end
 
 | Adapter | Status | Notes |
 |---------|--------|-------|
-| `Adapters.S3` | ✅ | S3, R2, MinIO. Via `req_s3`. |
+| `Adapters.S3` | ✅ | S3, R2, MinIO. Via `defdo_s3`. |
 | `Adapters.HTTP` | ⬜ | Future: `PUT`, `HEAD`, `DELETE` to any HTTP endpoint |
 | `Adapters.WebDAV` | ⬜ | Future: WebDAV protocol |
 | `Adapters.GoogleDrive` | ⬜ | Future: Google Drive API |
@@ -154,8 +155,9 @@ defmodule MyApp.CustomAdapter do
   def public_url(bucket, key, config, _opts), do: "https://..."
 end
 
-# Configure
-config :defdo_uploader, :adapter, MyApp.CustomAdapter
+# Use it: there is no global adapter setting; pass it per call.
+Defdo.Uploader.Storage.put(:tenant_logo, bytes, config: config, id: "brand",
+  adapter: MyApp.CustomAdapter)
 ```
 
 ## Credentials
@@ -181,14 +183,15 @@ Following the `defdo_wa` pattern, `tenant_id` is **opaque** inside the package.
 The SDK never interprets it. Host apps provide it via opts or process context.
 
 ```elixir
-# Explicit tenant — always works
-S3.upload_file(path, key, config, tenant_id: "tenant-123")
+# Explicit tenant — for system edges outside a request. When a context tenant
+# is also set they must agree, or Key.base/2 returns {:error, :tenant_mismatch}.
+Storage.put(:tenant_logo, bytes, config: config, id: "brand", tenant_id: "tenant-123")
 S3Credentials.put(creds, tenant_id: "tenant-123")
 
 # From process context — requires defdo_tenant
 S3Credentials.put(creds)  # reads Defdo.Tenant.Context.tenant_id()
 
-# Standalone — no tenant needed
+# Raw adapter — no tenant, no policy; the caller owns the key
 S3.upload_file(path, key, config)
 ```
 
@@ -216,10 +219,10 @@ defdo_uploader
   │
   ├── required
   │   ├── req ~> 0.5
-  │   └── req_s3 ~> 0.4
+  │   └── defdo_s3 ~> 0.2
   │
   └── optional (opt-in per level)
-      ├── defdo_tenant ~> 0.10       → Level 2: tenant isolation
+      ├── defdo_tenant ~> 0.15       → Level 2: tenant isolation
       ├── defdo_vault ~> 0.9         → Level 3: encrypted creds
       ├── defdo_tenant_boundary ~> 0.2 → Level 3: PubSub reactivity
       └── phoenix_live_view >= 1.0   → Level 3: embeddable form

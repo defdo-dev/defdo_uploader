@@ -72,6 +72,85 @@ defmodule Defdo.Uploader.Adapters.S3 do
     end
   end
 
+  @doc """
+  Stores `body` at `object_key` with an explicit content type.
+
+  Unlike `upload_file/3` the content type is never guessed from a filename:
+  policy-managed uploads have already sniffed it from the bytes.
+
+  Options:
+
+    * `:cache_control` — sent as `Cache-Control` and stored on the object
+  """
+  @spec put_object(String.t(), binary(), String.t(), config(), keyword()) ::
+          :ok | {:error, term()}
+  @impl Defdo.Uploader.Adapter
+  def put_object(object_key, body, content_type, config, opts \\ [])
+      when is_binary(object_key) and object_key != "" and is_binary(body) and
+             is_binary(content_type) and is_map(config) do
+    headers =
+      [{"content-type", content_type}]
+      |> maybe_header("cache-control", opts[:cache_control])
+
+    with :ok <- validate_config(config),
+         {bucket, _prefix} <- bucket_and_prefix(config.bucket),
+         {:ok, client} <- client(config),
+         {:ok, response} <-
+           Req.put(client, url: "s3://#{bucket}/#{object_key}", body: body, headers: headers) do
+      ensure_success(response)
+    end
+  end
+
+  @doc """
+  Reads an object. A missing object is `{:error, :not_found}`.
+  """
+  @spec get_object(String.t(), config()) ::
+          {:ok, %{body: binary(), content_type: String.t() | nil}} | {:error, term()}
+  @impl Defdo.Uploader.Adapter
+  def get_object(object_key, config)
+      when is_binary(object_key) and object_key != "" and is_map(config) do
+    with :ok <- validate_config(config),
+         {bucket, _prefix} <- bucket_and_prefix(config.bucket),
+         {:ok, client} <- client(config),
+         # `decode_body: false` keeps an image, or a JSON object, as the raw
+         # bytes that were stored.
+         {:ok, response} <-
+           Req.get(client, url: "s3://#{bucket}/#{object_key}", decode_body: false),
+         :ok <- normalize_head_status(response.status) do
+      {:ok, %{body: response.body, content_type: first_header(response, "content-type")}}
+    end
+  end
+
+  def get_object(_object_key, _config), do: {:error, :invalid_object_key}
+
+  @doc """
+  A time-limited GET URL for a private object.
+
+  Signing happens locally; no request is made. `expires` is in seconds.
+  """
+  @spec presign_get(String.t(), config(), pos_integer()) ::
+          {:ok, String.t()} | {:error, term()}
+  @impl Defdo.Uploader.Adapter
+  def presign_get(object_key, config, expires \\ 300)
+      when is_binary(object_key) and object_key != "" and is_map(config) and
+             is_integer(expires) and expires > 0 do
+    with :ok <- validate_config(config),
+         {bucket, _prefix} <- bucket_and_prefix(config.bucket) do
+      options =
+        [
+          bucket: bucket,
+          key: object_key,
+          access_key_id: config.access_key_id,
+          secret_access_key: config.secret_access_key,
+          region: config.region,
+          expires: expires
+        ]
+        |> maybe_put_kv(:endpoint_url, normalize_endpoint(config[:endpoint]))
+
+      {:ok, S3.presign_url(options)}
+    end
+  end
+
   @spec delete_object(String.t(), config()) :: :ok | {:error, term()}
   def delete_object(object_key, config)
       when is_binary(object_key) and object_key != "" and is_map(config) do
@@ -314,6 +393,9 @@ defmodule Defdo.Uploader.Adapters.S3 do
       content_type -> [{"content-type", content_type}]
     end
   end
+
+  defp maybe_header(headers, _name, nil), do: headers
+  defp maybe_header(headers, name, value), do: headers ++ [{name, value}]
 
   defp ensure_success(%Response{status: status}) when status in 200..299, do: :ok
   defp ensure_success(%Response{status: status}), do: {:error, {:http_status, status}}

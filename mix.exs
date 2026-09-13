@@ -39,6 +39,8 @@ defmodule Defdo.Uploader.MixProject do
       {:defdo_vault, "~> 0.14", optional: true, organization: @organization},
       # Optional — tenant-aware PubSub
       {:defdo_tenant_boundary, "~> 0.4", optional: true, organization: @organization},
+      # Optional — image re-encoding for Defdo.Uploader.Storage (libvips)
+      {:image, "~> 0.72", optional: true},
       # Optional — LiveComponent form (used in test/support)
       {:phoenix_live_view, "~> 1.2", optional: true},
       # Dev / Test
