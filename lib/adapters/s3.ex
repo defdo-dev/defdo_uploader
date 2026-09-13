@@ -7,8 +7,8 @@ defmodule Defdo.Uploader.Adapters.S3 do
   @behaviour Defdo.Uploader.Adapter
 
   require Logger
-  alias Req.Response
   alias Defdo.S3
+  alias Req.Response
 
   @type creds :: %{
           required(:access_key_id) => String.t(),
@@ -49,6 +49,11 @@ defmodule Defdo.Uploader.Adapters.S3 do
              body: body,
              headers: content_type_header(local_path)
            ),
+         # Req returns {:ok, response} for EVERY status, 403 included. Without
+         # this check a rejected overwrite of an existing object fell through
+         # to head_object, found the OLD object, and reported success with
+         # stale metadata.
+         :ok <- ensure_success(response),
          {:ok, head} <- head_object(object_key, config) do
       {:ok,
        %{
@@ -73,7 +78,11 @@ defmodule Defdo.Uploader.Adapters.S3 do
     with :ok <- validate_config(config),
          {bucket, _prefix} <- bucket_and_prefix(config.bucket),
          {:ok, client} <- client(config),
-         {:ok, _response} <- Req.delete(client, url: "s3://#{bucket}/#{object_key}") do
+         {:ok, response} <- Req.delete(client, url: "s3://#{bucket}/#{object_key}"),
+         # A 403 used to come back as :ok, so callers deleted their database
+         # row and orphaned the object. A missing object is already the
+         # desired end state, so 404 stays :ok and deletes remain idempotent.
+         :ok <- ensure_deleted(response) do
       :ok
     else
       {:error, reason} -> {:error, reason}
@@ -150,12 +159,13 @@ defmodule Defdo.Uploader.Adapters.S3 do
   @doc false
   def upload_one(client, bucket, key, url) do
     with {:ok, body, content_type} <- fetch_body(url),
-         {:ok, _} <-
+         {:ok, response} <-
            Req.put(client,
              url: "s3://#{bucket}/#{key}",
              body: body,
              headers: content_type_value_header(content_type)
-           ) do
+           ),
+         :ok <- ensure_success(response) do
       {:ok, key}
     else
       {:error, reason} -> {:error, {key, reason}}
@@ -264,7 +274,10 @@ defmodule Defdo.Uploader.Adapters.S3 do
       |> maybe_put_endpoint(creds[:endpoint])
 
     try do
-      {:ok, S3.attach(Req.new(), opts)}
+      # `:req_options` is merged into the base request. Its main use is
+      # `plug: {Req.Test, name}`, so the adapter can be exercised against a
+      # stub without a network — this module had no tests at all before.
+      {:ok, S3.attach(Req.new(creds[:req_options] || []), opts)}
     rescue
       error -> {:error, error}
     end
@@ -301,6 +314,12 @@ defmodule Defdo.Uploader.Adapters.S3 do
       content_type -> [{"content-type", content_type}]
     end
   end
+
+  defp ensure_success(%Response{status: status}) when status in 200..299, do: :ok
+  defp ensure_success(%Response{status: status}), do: {:error, {:http_status, status}}
+
+  defp ensure_deleted(%Response{status: 404}), do: :ok
+  defp ensure_deleted(response), do: ensure_success(response)
 
   defp normalize_head_status(status) when status in 200..299, do: :ok
   defp normalize_head_status(404), do: {:error, :not_found}
