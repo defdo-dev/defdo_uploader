@@ -14,11 +14,23 @@ floors.
 | `defdo_tenant` (optional) | `~> 0.15` | `~> 0.16` |
 | `defdo_vault` (optional) | `~> 0.14` | `~> 0.16` |
 
-Both were resolving 0.16.0 in every host that will adopt this release —
-defdo_auth, defdo_cms and defdo_theme already lock both — so the floor now
-states what is actually built and tested. defdo_theme_hub locks vault 0.15.1;
-its `~> 0.2` requirement admits this release, and taking it moves vault to
-0.16.0 there too. Note that 0.16.0 of defdo_vault requires Flop `~> 0.29`.
+This package resolves and tests against 0.16.0 of both, so the floors say so.
+**That is not free for every host.** Committed locks at the time of release:
+
+| host | defdo_tenant | defdo_vault | Flop |
+|---|---|---|---|
+| defdo_theme | 0.16.0 | 0.16.0 | 0.29.0 |
+| defdo_cms | 0.16.0 | 0.15.1 | 0.29.0 |
+| defdo_auth | 0.16.0 | 0.15.1 | 0.28.0, `override: true` |
+| defdo_theme_hub | 0.16.0 | 0.15.1 | 0.28.0 |
+
+defdo_vault 0.16.0 requires Flop `~> 0.29`, and Flop 0.29 turned `Flop.Schema`
+from a protocol into a behaviour. A host still on Flop 0.28 therefore cannot
+take this release until it moves its `@derive Flop.Schema` schemas to
+`use Flop.Schema` and raises any Flop override — defdo_auth has two such
+schemas and a `~> 0.28.0` override; defdo_theme_hub also locks Flop 0.28.
+Until then the resolver keeps those hosts on 0.2.x; nothing breaks, they just
+do not receive this release.
 
 **Reaches `~> 0.2` consumers without a requirement change.** A two-segment
 `~> 0.2` caps at the next major, so theme_hub, cms and my_mvno pick this
