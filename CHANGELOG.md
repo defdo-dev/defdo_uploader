@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Security — decimal 3.2.0 (EEF-CVE-2026-97853)
+- Dependencies updated to latest compatible versions: decimal 3.1.1 → 3.2.0, defdo_migrator 0.4.1 → 0.5.1, defdo_s3 0.2.0 → 0.2.1, defdo_tasks 0.7.1 → 0.7.2, defdo_tenant 0.16.0 → 0.22.1, defdo_tenant_boundary 0.4.0 → 0.7.0, defdo_vault 0.16.0 → 0.21.0, ex_ast 0.13.1 → 0.16.0, finch 0.23.0 → 0.24.0, flop 0.29.0 → 0.29.1, hpax 1.0.4 → 1.1.0, lazy_html 0.1.12 → 0.1.13, makeup 1.2.2 → 1.2.3, mint 1.10.0 → 1.11.0, oban 2.23.1 → 2.24.2, phoenix 1.8.13 → 1.8.15, phoenix_live_view 1.2.11 → 1.2.12, phoenix_pubsub 2.3.0 → 2.4.1, phoenix_template 1.0.4 → 1.1.0, req 0.7.4 → 0.7.5, sourceror 1.12.2 → 1.12.4, spitfire 0.4.1 → 0.4.3, vix 0.41.0 → 0.42.0.
+
 ## 0.3.0
 
 A minor, for three reasons that each would have been enough: new public API
