@@ -81,6 +81,10 @@ defmodule Defdo.Uploader.Adapters.S3 do
   Options:
 
     * `:cache_control` — sent as `Cache-Control` and stored on the object
+    * `:metadata` — a map (or keyword list) of user metadata, sent as
+      `x-amz-meta-<name>` headers and returned by S3/R2 on GET and HEAD.
+      Names are lowercased; names outside `[a-z0-9-]` and non-string values
+      are refused with `{:error, {:invalid_metadata, name}}`
   """
   @spec put_object(String.t(), binary(), String.t(), config(), keyword()) ::
           :ok | {:error, term()}
@@ -88,11 +92,12 @@ defmodule Defdo.Uploader.Adapters.S3 do
   def put_object(object_key, body, content_type, config, opts \\ [])
       when is_binary(object_key) and object_key != "" and is_binary(body) and
              is_binary(content_type) and is_map(config) do
-    headers =
-      [{"content-type", content_type}]
-      |> maybe_header("cache-control", opts[:cache_control])
-
-    with :ok <- validate_config(config),
+    with {:ok, meta_headers} <- metadata_headers(opts[:metadata] || []),
+         headers =
+           [{"content-type", content_type}]
+           |> maybe_header("cache-control", opts[:cache_control])
+           |> Kernel.++(meta_headers),
+         :ok <- validate_config(config),
          {bucket, _prefix} <- bucket_and_prefix(config.bucket),
          {:ok, client} <- client(config),
          {:ok, response} <-
@@ -393,6 +398,21 @@ defmodule Defdo.Uploader.Adapters.S3 do
       content_type -> [{"content-type", content_type}]
     end
   end
+
+  defp metadata_headers(metadata) when is_map(metadata) or is_list(metadata) do
+    Enum.reduce_while(metadata, {:ok, []}, fn {name, value}, {:ok, acc} ->
+      name = name |> to_string() |> String.downcase()
+
+      if Regex.match?(~r/\A[a-z0-9][a-z0-9-]{0,127}\z/, name) and is_binary(value) and
+           String.printable?(value) and not String.contains?(value, ["\r", "\n"]) do
+        {:cont, {:ok, acc ++ [{"x-amz-meta-" <> name, value}]}}
+      else
+        {:halt, {:error, {:invalid_metadata, name}}}
+      end
+    end)
+  end
+
+  defp metadata_headers(_metadata), do: {:error, {:invalid_metadata, :not_a_map}}
 
   defp maybe_header(headers, _name, nil), do: headers
   defp maybe_header(headers, name, value), do: headers ++ [{name, value}]
