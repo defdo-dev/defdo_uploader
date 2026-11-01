@@ -55,7 +55,7 @@ steps:
           mix hex.organization auth "$HEX_ORG_NAME" --key "$HEX_ORG_TOKEN"
         fi
 
-        mix deps.get
+        sh scripts/ci/deps-get.sh
         # THE compile. Warm dev + test _build once; every dependent step
         # reuses these artifacts via the shared workspace and never recompiles.
         mix compile --warnings-as-errors
