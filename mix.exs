@@ -34,11 +34,11 @@ defmodule Defdo.Uploader.MixProject do
       {:req, "~> 0.7"},
       {:defdo_s3, "~> 0.2", organization: @organization},
       # Optional — tenancy
-      {:defdo_tenant, "~> 0.16", optional: true, organization: @organization},
+      {:defdo_tenant, "~> 0.22", optional: true, organization: @organization},
       # Optional — encrypted credential storage
-      {:defdo_vault, "~> 0.16", optional: true, organization: @organization},
+      {:defdo_vault, "~> 0.21", optional: true, organization: @organization},
       # Optional — tenant-aware PubSub
-      {:defdo_tenant_boundary, "~> 0.4", optional: true, organization: @organization},
+      {:defdo_tenant_boundary, "~> 0.7", optional: true, organization: @organization},
       # Optional — image re-encoding for Defdo.Uploader.Storage (libvips)
       {:image, "~> 0.72", optional: true},
       # Optional — LiveComponent form (used in test/support)
