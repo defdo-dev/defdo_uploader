@@ -168,4 +168,35 @@ defmodule Defdo.Uploader.Adapters.S3Test do
       assert S3.upload_one(client, "assets", "k.png", path) == {:ok, "k.png"}
     end
   end
+
+  describe "put_object/5 :metadata" do
+    test "sends user metadata as x-amz-meta-* headers", %{config: config} do
+      Req.Test.stub(@stub, fn conn ->
+        assert conn.method == "PUT"
+        assert Plug.Conn.get_req_header(conn, "x-amz-meta-hash") == ["abc"]
+        assert Plug.Conn.get_req_header(conn, "x-amz-meta-checked-at") == ["1700000000000"]
+        assert Plug.Conn.get_req_header(conn, "cache-control") == ["public, max-age=60"]
+        Plug.Conn.send_resp(conn, 200, "")
+      end)
+
+      assert :ok =
+               S3.put_object("m/1.png", "png", "image/png", config,
+                 cache_control: "public, max-age=60",
+                 metadata: %{"hash" => "abc", "Checked-At" => "1700000000000"}
+               )
+    end
+
+    test "refuses invalid names and values without a request", %{config: config} do
+      Req.Test.stub(@stub, fn _conn -> flunk("no request expected") end)
+
+      assert {:error, {:invalid_metadata, "bad name"}} =
+               S3.put_object("k", "b", "image/png", config, metadata: %{"bad name" => "v"})
+
+      assert {:error, {:invalid_metadata, "x"}} =
+               S3.put_object("k", "b", "image/png", config, metadata: [x: "a\r\nb"])
+
+      assert {:error, {:invalid_metadata, "n"}} =
+               S3.put_object("k", "b", "image/png", config, metadata: %{n: 1})
+    end
+  end
 end

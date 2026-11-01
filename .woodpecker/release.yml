@@ -57,11 +57,11 @@ steps:
           mix hex.organization auth "$HEX_ORG_NAME" --key "$HEX_ORG_TOKEN"
         fi
 
-        mix deps.get
+        sh scripts/ci/deps-get.sh
         mix format --check-formatted
         mix compile --warnings-as-errors
         mix test
-        MIX_ENV=dev mix deps.get
+        MIX_ENV=dev sh scripts/ci/deps-get.sh
         MIX_ENV=dev mix hex.build
 
   - name: hex-publish
