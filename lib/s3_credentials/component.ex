@@ -36,7 +36,7 @@ defmodule Defdo.Uploader.CredentialsForm do
 
   use Phoenix.LiveComponent
 
-  alias Defdo.Uploader.Adapters.S3
+  alias Defdo.Uploader.ConnectionCheck
   alias Defdo.Uploader.S3Credentials
 
   @default_region "us-east-1"
@@ -91,14 +91,28 @@ defmodule Defdo.Uploader.CredentialsForm do
         {:noreply, socket |> assign(:errors, errors) |> assign(:test_result, nil)}
 
       _ ->
-        result =
-          case S3.validate_config(attrs) do
-            :ok -> {:ok, %{}}
-            {:error, reason} -> {:error, reason}
-          end
+        # Four real requests (connect, write, edit, delete) can take seconds,
+        # so they run off the LiveView process.
+        check = socket.assigns[:connection_check] || (&ConnectionCheck.run/1)
 
-        {:noreply, socket |> assign(:errors, %{}) |> assign(:test_result, result)}
+        {:noreply,
+         socket
+         |> assign(:errors, %{})
+         |> assign(:test_result, nil)
+         |> assign(:testing?, true)
+         |> start_async(:connection_check, fn -> check.(attrs) end)}
     end
+  end
+
+  @impl true
+  def handle_async(:connection_check, {:ok, %{steps: _} = result}, socket),
+    do: {:noreply, socket |> assign(:testing?, false) |> assign(:test_result, result)}
+
+  def handle_async(:connection_check, _other, socket) do
+    {:noreply,
+     socket
+     |> assign(:testing?, false)
+     |> assign(:test_result, %{ok?: false, steps: [], leftover: nil})}
   end
 
   defp run_save(params, socket) do
@@ -133,17 +147,33 @@ defmodule Defdo.Uploader.CredentialsForm do
   def render(assigns) do
     ~H"""
     <div id={@id} class="space-y-6">
+      <p :if={@testing?} id={"#{@id}-testing"} role="status" class="alert">
+        Testing the connection: connect, write, edit, delete…
+      </p>
+
       <div
         :if={@test_result}
         id={"#{@id}-test-result"}
         role="status"
-        class={["alert", if(match?({:ok, _}, @test_result), do: "alert-success", else: "alert-error")]}
+        class={["alert items-start", if(@test_result.ok?, do: "alert-success", else: "alert-error")]}
       >
-        <%= if match?({:ok, _}, @test_result) do %>
-          <span><strong>Connected</strong> — the credentials are complete.</span>
-        <% else %>
-          <span><strong>Error</strong> — {humanize(@test_result)}</span>
-        <% end %>
+        <div class="space-y-2">
+          <p class="font-semibold">
+            {if @test_result.ok?,
+              do: "Connection verified: the store accepted every step.",
+              else: "Connection test failed."}
+          </p>
+          <ol class="space-y-1 text-sm">
+            <li :for={step <- @test_result.steps} data-step={step.step} data-status={step.status}>
+              <span aria-hidden="true">{step_mark(step.status)}</span>
+              {step_label(step.step)}: {step_outcome(step)}
+            </li>
+          </ol>
+          <p :if={@test_result.steps == []} class="text-sm">The test could not run.</p>
+          <p :if={@test_result.leftover} class="text-sm">
+            A test object could not be removed: <code>{@test_result.leftover}</code>
+          </p>
+        </div>
       </div>
 
       <div
@@ -302,6 +332,37 @@ defmodule Defdo.Uploader.CredentialsForm do
   defp secret_stored?(creds), do: not blank?(Map.get(creds || %{}, :secret_access_key))
 
   # Reasons are atoms or short terms from this package; never the credentials themselves.
+  defp step_mark(:ok), do: "✓"
+  defp step_mark(:error), do: "✗"
+  defp step_mark(:skipped), do: "–"
+
+  defp step_label(:connect), do: "Connect"
+  defp step_label(:write), do: "Write a test object"
+  defp step_label(:edit), do: "Edit it"
+  defp step_label(:delete), do: "Delete it"
+
+  defp step_outcome(%{status: :ok}), do: "ok"
+  defp step_outcome(%{status: :skipped}), do: "not run"
+  defp step_outcome(%{status: :error, reason: reason}), do: step_reason(reason)
+
+  defp step_reason(:missing_credentials), do: "some credentials are missing"
+
+  defp step_reason({:http_status, 403}),
+    do: "access denied (403): check the key, its permissions and the bucket"
+
+  defp step_reason({:http_status, 404}),
+    do: "not found (404): check the bucket name and the endpoint"
+
+  defp step_reason({:http_status, status}), do: "the store answered #{status}"
+
+  defp step_reason({:transport, _module}),
+    do: "the store could not be reached: check the endpoint"
+
+  defp step_reason(:content_mismatch), do: "the object read back differs from what was written"
+  defp step_reason(:still_there), do: "the object is still there after the delete"
+  defp step_reason(reason) when is_atom(reason), do: Phoenix.Naming.humanize(reason)
+  defp step_reason(_reason), do: "the request failed"
+
   defp humanize({:error, :missing_credentials}), do: "some credentials are missing"
   defp humanize({:error, reason}) when is_atom(reason), do: Phoenix.Naming.humanize(reason)
   defp humanize({:error, _reason}), do: "the request failed"

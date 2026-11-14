@@ -21,7 +21,28 @@ defmodule Defdo.Uploader.CredentialsFormTest do
 
   @endpoint Defdo.Uploader.TestEndpoint
 
+  @passed %{
+    ok?: true,
+    leftover: nil,
+    steps:
+      for(step <- [:connect, :write, :edit, :delete], do: %{step: step, status: :ok, reason: nil})
+  }
+
   setup do
+    test_pid = self()
+
+    Application.put_env(:defdo_uploader, :test_connection_check, fn config ->
+      send(test_pid, {:checked, config})
+
+      Process.get(:check_result) ||
+        Application.get_env(:defdo_uploader, :test_check_result, @passed)
+    end)
+
+    on_exit(fn ->
+      Application.delete_env(:defdo_uploader, :test_connection_check)
+      Application.delete_env(:defdo_uploader, :test_check_result)
+    end)
+
     {:ok, lv, _html} = live_isolated(build_conn(), Defdo.Uploader.TestCredentialsLive)
     %{lv: lv}
   end
@@ -70,15 +91,53 @@ defmodule Defdo.Uploader.CredentialsFormTest do
       assert html =~ "can&#39;t be blank" or html =~ "can't be blank"
     end
 
-    test "uses the current form values and shows the result inside the component", %{lv: lv} do
-      html =
-        lv
-        |> form("#creds-form", creds: valid_params())
-        |> render_submit(%{"intent" => "test"})
+    test "runs the check with the form values and lists every step", %{lv: lv} do
+      lv |> form("#creds-form", creds: valid_params()) |> render_submit(%{"intent" => "test"})
+      html = render_async(lv)
 
-      assert html =~ "Connected"
-      assert has_element?(lv, "#s3-creds-test-result")
+      assert_received {:checked, %{bucket: bucket, access_key_id: _}}
+      assert bucket == valid_params()["bucket"]
+
+      assert html =~ "Connection verified"
+
+      for step <- ~w(connect write edit delete) do
+        assert has_element?(lv, "#s3-creds-test-result li[data-step='#{step}'][data-status='ok']")
+      end
+
       refute html =~ "Credentials saved"
+    end
+
+    test "a failed step is named with its reason and the later ones are not run", %{lv: lv} do
+      Application.put_env(:defdo_uploader, :test_check_result, %{
+        ok?: false,
+        leftover: nil,
+        steps: [
+          %{step: :connect, status: :ok, reason: nil},
+          %{step: :write, status: :error, reason: {:http_status, 403}},
+          %{step: :edit, status: :skipped, reason: nil},
+          %{step: :delete, status: :skipped, reason: nil}
+        ]
+      })
+
+      lv |> form("#creds-form", creds: valid_params()) |> render_submit(%{"intent" => "test"})
+      html = render_async(lv)
+
+      assert html =~ "Connection test failed"
+      assert has_element?(lv, "li[data-step='write'][data-status='error']", "access denied (403)")
+      assert has_element?(lv, "li[data-step='edit'][data-status='skipped']")
+      refute html =~ "Connection verified"
+    end
+
+    test "a check that crashes is reported, not left spinning", %{lv: lv} do
+      Application.put_env(:defdo_uploader, :test_connection_check, fn _config -> raise "boom" end)
+      {:ok, lv2, _html} = live_isolated(build_conn(), Defdo.Uploader.TestCredentialsLive)
+
+      lv2 |> form("#creds-form", creds: valid_params()) |> render_submit(%{"intent" => "test"})
+      html = render_async(lv2)
+
+      assert html =~ "The test could not run"
+      refute has_element?(lv2, "#s3-creds-testing")
+      assert Process.alive?(lv.pid)
     end
 
     test "the secret is never rendered back", %{lv: lv} do
@@ -88,6 +147,7 @@ defmodule Defdo.Uploader.CredentialsFormTest do
         |> render_submit(%{"intent" => "test"})
 
       refute html =~ "TOPSECRETVALUE"
+      refute render_async(lv) =~ "TOPSECRETVALUE"
       html = lv |> form("#creds-form", creds: valid_params()) |> render_change()
       refute html =~ "TOPSECRETVALUE"
     end
