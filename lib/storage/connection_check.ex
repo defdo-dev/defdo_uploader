@@ -30,22 +30,33 @@ defmodule Defdo.Uploader.ConnectionCheck do
   @doc "The steps, in the order they run."
   def steps, do: @steps
 
-  @spec run(map()) :: result()
-  def run(config) when is_map(config) do
+  @doc """
+  Runs the check. `opts[:on_step]` is called with each step as it starts
+  (`status: :running`) and as it ends, so a caller can show progress.
+  """
+  @spec run(map(), keyword()) :: result()
+  def run(config, opts \\ []) when is_map(config) do
     config = with_timeouts(config)
     key = probe_key(config)
+    notify = Keyword.get(opts, :on_step) || fn _step -> :ok end
 
     steps =
       @steps
       |> Enum.reduce([], fn step, done ->
-        if Enum.any?(done, &(&1.status != :ok)) do
-          [%{step: step, status: :skipped, reason: nil} | done]
-        else
-          case run_step(step, key, config) do
-            :ok -> [%{step: step, status: :ok, reason: nil} | done]
-            {:error, reason} -> [%{step: step, status: :error, reason: public(reason)} | done]
+        result =
+          if Enum.any?(done, &(&1.status != :ok)) do
+            %{step: step, status: :skipped, reason: nil}
+          else
+            notify.(%{step: step, status: :running, reason: nil})
+
+            case run_step(step, key, config) do
+              :ok -> %{step: step, status: :ok, reason: nil}
+              {:error, reason} -> %{step: step, status: :error, reason: public(reason)}
+            end
           end
-        end
+
+        notify.(result)
+        [result | done]
       end)
       |> Enum.reverse()
 
@@ -53,6 +64,37 @@ defmodule Defdo.Uploader.ConnectionCheck do
 
     %{ok?: ok?, steps: steps, leftover: leftover(ok?, steps, key, config)}
   end
+
+  @doc "Short name of a step, for a host that lists them."
+  def label(:connect), do: "Connect"
+  def label(:write), do: "Write a test object"
+  def label(:edit), do: "Edit it"
+  def label(:delete), do: "Delete it"
+
+  @doc "What happened in a step, in words. Never contains a credential."
+  def detail(%{status: :ok}), do: "ok"
+  def detail(%{status: :running}), do: "running"
+  def detail(%{status: :pending}), do: "waiting"
+  def detail(%{status: :skipped}), do: "not run"
+  def detail(%{status: :error, reason: reason}), do: reason_text(reason)
+
+  defp reason_text(:missing_credentials), do: "some credentials are missing"
+
+  defp reason_text({:http_status, 403}),
+    do: "access denied (403): check the key, its permissions and the bucket"
+
+  defp reason_text({:http_status, 404}),
+    do: "not found (404): check the bucket name and the endpoint"
+
+  defp reason_text({:http_status, status}), do: "the store answered #{status}"
+
+  defp reason_text({:transport, _module}),
+    do: "the store could not be reached: check the endpoint"
+
+  defp reason_text(:content_mismatch), do: "the object read back differs from what was written"
+  defp reason_text(:still_there), do: "the object is still there after the delete"
+  defp reason_text(:check_crashed), do: "the test could not run"
+  defp reason_text(_reason), do: "the request failed"
 
   defp run_step(:connect, key, config) do
     case S3.head_object(key, config) do

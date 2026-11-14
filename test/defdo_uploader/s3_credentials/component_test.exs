@@ -31,11 +31,12 @@ defmodule Defdo.Uploader.CredentialsFormTest do
   setup do
     test_pid = self()
 
-    Application.put_env(:defdo_uploader, :test_connection_check, fn config ->
+    Application.put_env(:defdo_uploader, :test_connection_check, fn config, opts ->
       send(test_pid, {:checked, config})
-
-      Process.get(:check_result) ||
-        Application.get_env(:defdo_uploader, :test_check_result, @passed)
+      result = Application.get_env(:defdo_uploader, :test_check_result, @passed)
+      # report progress the way the real check does
+      for step <- result.steps, do: opts[:on_step].(step)
+      result
     end)
 
     on_exit(fn ->
@@ -129,15 +130,39 @@ defmodule Defdo.Uploader.CredentialsFormTest do
     end
 
     test "a check that crashes is reported, not left spinning", %{lv: lv} do
-      Application.put_env(:defdo_uploader, :test_connection_check, fn _config -> raise "boom" end)
+      Application.put_env(:defdo_uploader, :test_connection_check, fn _config, _opts ->
+        raise "boom"
+      end)
+
       {:ok, lv2, _html} = live_isolated(build_conn(), Defdo.Uploader.TestCredentialsLive)
 
       lv2 |> form("#creds-form", creds: valid_params()) |> render_submit(%{"intent" => "test"})
       html = render_async(lv2)
 
-      assert html =~ "The test could not run"
-      refute has_element?(lv2, "#s3-creds-testing")
+      assert html =~ "Connection test failed"
+      assert html =~ "the test could not run"
+      refute html =~ "Testing..."
       assert Process.alive?(lv.pid)
+    end
+
+    test "a host with a :check_view slot presents the states and can dismiss them" do
+      {:ok, lv, _html} = live_isolated(build_conn(), Defdo.Uploader.TestCredentialsSlotLive)
+
+      lv |> form("#creds-form", creds: valid_params()) |> render_submit(%{"intent" => "test"})
+      render_async(lv)
+
+      # the host's markup, not the component's
+      assert has_element?(lv, "dialog#host-check[data-status='passed']")
+      refute has_element?(lv, "#s3-creds-test-result")
+
+      for step <- ~w(connect write edit delete) do
+        assert has_element?(lv, "#host-check li[data-step='#{step}'][data-status='ok']")
+      end
+
+      assert has_element?(lv, "#host-check li", "Write a test object: ok")
+
+      lv |> element("#host-check-close") |> render_click()
+      refute has_element?(lv, "#host-check")
     end
 
     test "the secret is never rendered back", %{lv: lv} do
