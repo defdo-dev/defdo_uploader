@@ -310,6 +310,33 @@ defmodule Defdo.Uploader.CredentialsForm do
   attr(:placeholder, :string, default: nil)
 
   # A password input never gets a `value`: a secret is never rendered back into the HTML.
+  # Without a value the server would also clear what the person typed on the next
+  # `phx-change` patch (LiveView syncs an unfocused input to the rendered value), so
+  # the input sits in a `phx-update="ignore"` wrapper: the browser keeps the typed
+  # secret, the server never sends one.
+  defp field(%{type: "password"} = assigns) do
+    assigns = assign(assigns, :error, assigns.errors[assigns.name])
+
+    ~H"""
+    <div class="form-control w-full">
+      <label for={@id} class="label"><span class="label-text font-medium">{@label}</span></label>
+      <div id={"#{@id}-keep"} phx-update="ignore">
+        <input
+          type="password"
+          name={"creds[#{@name}]"}
+          id={@id}
+          placeholder={@placeholder}
+          autocomplete="new-password"
+          aria-describedby={"#{@id}-hint #{@id}-error"}
+          class="input input-bordered w-full"
+        />
+      </div>
+      <p :if={@hint} id={"#{@id}-hint"} class="label text-xs opacity-70">{@hint}</p>
+      <p :if={@error} id={"#{@id}-error"} class="label text-sm text-error">{@error}</p>
+    </div>
+    """
+  end
+
   defp field(assigns) do
     assigns = assign(assigns, :error, assigns.errors[assigns.name])
 
@@ -320,9 +347,9 @@ defmodule Defdo.Uploader.CredentialsForm do
         type={@type}
         name={"creds[#{@name}]"}
         id={@id}
-        value={if @type != "password", do: @params[@name]}
+        value={@params[@name]}
         placeholder={@placeholder}
-        autocomplete={if @type == "password", do: "new-password", else: "off"}
+        autocomplete="off"
         aria-invalid={@error && "true"}
         aria-describedby={@error && "#{@id}-error"}
         class={["input input-bordered w-full", @error && "input-error"]}
