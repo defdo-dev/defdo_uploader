@@ -32,6 +32,24 @@ defmodule Defdo.Uploader.CredentialsForm do
           <.link navigate={~p"/admin"}>Back to Admin</.link>
         </:footer>
       </.live_component>
+
+  ## Test Connection
+
+  The check itself is `Defdo.Uploader.ConnectionCheck` (connect, write, edit, delete with one
+  throwaway object). By default the component lists the steps above the form. A host that wants
+  its own presentation (a dialog, say) gives a `:check_view` slot; it receives the live state and
+  the component renders nothing for the check itself:
+
+      <:check_view :let={check}>
+        <dialog open>
+          <p :for={step <- check.steps}>{step.label}: {step.detail}</p>
+          <button phx-click={check.dismiss} phx-target={check.target}>Close</button>
+        </dialog>
+      </:check_view>
+
+  `check.status` is `:running | :passed | :failed`; each of `check.steps` has `step`, `status`
+  (`:pending | :running | :ok | :error | :skipped`), `label` and `detail` (words, never a
+  credential); `check.leftover` is the key of a test object the store refused to delete, or nil.
   """
 
   use Phoenix.LiveComponent
@@ -43,7 +61,20 @@ defmodule Defdo.Uploader.CredentialsForm do
   @fields ~w(access_key_id secret_access_key bucket region endpoint)
   @required ~w(access_key_id secret_access_key bucket)
 
+  # A step of the running check, sent by the check's task (`send_update/3`).
   @impl true
+  def update(%{check_step: %{step: name} = step}, socket) do
+    case socket.assigns[:check] do
+      %{status: :running, steps: steps} = check ->
+        steps = Enum.map(steps, &if(&1.step == name, do: described(step), else: &1))
+        {:ok, assign(socket, :check, %{check | steps: steps})}
+
+      # dismissed, or already finished: a late step changes nothing
+      _ ->
+        {:ok, socket}
+    end
+  end
+
   def update(%{tenant_id: tenant_id} = assigns, socket) do
     creds = load_creds(tenant_id)
 
@@ -53,9 +84,8 @@ defmodule Defdo.Uploader.CredentialsForm do
      |> assign(:creds, creds)
      |> assign(:params, stored_params(creds))
      |> assign(:errors, %{})
-     |> assign(:test_result, nil)
+     |> assign(:check, nil)
      |> assign(:save_result, nil)
-     |> assign(:testing?, false)
      |> assign(:saving?, false)
      |> maybe_subscribe(tenant_id)}
   end
@@ -82,41 +112,70 @@ defmodule Defdo.Uploader.CredentialsForm do
 
   def handle_event("save", _params, socket), do: run_save(socket.assigns.params, socket)
 
+  # The host's own presentation of the check (the `:check` slot) closes it with this.
+  def handle_event("dismiss_check", _params, socket), do: {:noreply, assign(socket, :check, nil)}
+
   defp run_test(params, socket) do
     socket = assign(socket, :params, params) |> assign(:save_result, nil)
     attrs = normalize(params, socket.assigns.creds)
 
     case errors(attrs) do
       errors when map_size(errors) > 0 ->
-        {:noreply, socket |> assign(:errors, errors) |> assign(:test_result, nil)}
+        {:noreply, socket |> assign(:errors, errors) |> assign(:check, nil)}
 
       _ ->
         # Four real requests (connect, write, edit, delete) can take seconds,
         # so they run off the LiveView process.
-        check = socket.assigns[:connection_check] || (&ConnectionCheck.run/1)
+        check = socket.assigns[:connection_check] || (&ConnectionCheck.run/2)
+        view = self()
+        myself = socket.assigns.myself
+
+        on_step = fn step ->
+          Phoenix.LiveView.send_update(view, myself, check_step: step)
+        end
+
+        pending =
+          for step <- ConnectionCheck.steps(), do: described(%{step: step, status: :pending})
 
         {:noreply,
          socket
          |> assign(:errors, %{})
-         |> assign(:test_result, nil)
-         |> assign(:testing?, true)
-         |> start_async(:connection_check, fn -> check.(attrs) end)}
+         |> assign(:check, %{status: :running, steps: pending, leftover: nil})
+         |> start_async(:connection_check, fn -> check.(attrs, on_step: on_step) end)}
     end
   end
 
   @impl true
-  def handle_async(:connection_check, {:ok, %{steps: _} = result}, socket),
-    do: {:noreply, socket |> assign(:testing?, false) |> assign(:test_result, result)}
+  def handle_async(:connection_check, {:ok, %{steps: steps} = result}, socket) do
+    check = %{
+      status: if(result.ok?, do: :passed, else: :failed),
+      steps: Enum.map(steps, &described/1),
+      leftover: result[:leftover]
+    }
+
+    {:noreply, assign(socket, :check, check)}
+  end
 
   def handle_async(:connection_check, _other, socket) do
-    {:noreply,
-     socket
-     |> assign(:testing?, false)
-     |> assign(:test_result, %{ok?: false, steps: [], leftover: nil})}
+    steps =
+      for step <- ConnectionCheck.steps(),
+          do: described(%{step: step, status: :error, reason: :check_crashed})
+
+    {:noreply, assign(socket, :check, %{status: :failed, steps: steps, leftover: nil})}
+  end
+
+  # A step as a host shows it: the status plus the words for it.
+  defp described(step) do
+    step = Map.put_new(step, :reason, nil)
+
+    Map.merge(step, %{
+      label: ConnectionCheck.label(step.step),
+      detail: ConnectionCheck.detail(step)
+    })
   end
 
   defp run_save(params, socket) do
-    socket = assign(socket, :params, params) |> assign(:test_result, nil)
+    socket = assign(socket, :params, params) |> assign(:check, nil)
     attrs = normalize(params, socket.assigns.creds)
 
     case errors(attrs) do
@@ -147,31 +206,32 @@ defmodule Defdo.Uploader.CredentialsForm do
   def render(assigns) do
     ~H"""
     <div id={@id} class="space-y-6">
-      <p :if={@testing?} id={"#{@id}-testing"} role="status" class="alert">
-        Testing the connection: connect, write, edit, delete…
-      </p>
-
+      <%!-- The host presents the check when it gives a `:check` slot; otherwise it is listed here. --%>
+      <%= if @check && slot_given?(assigns) do %>
+        {render_slot(@check_view, %{
+          status: @check.status,
+          steps: @check.steps,
+          leftover: @check.leftover,
+          target: @myself,
+          dismiss: "dismiss_check"
+        })}
+      <% end %>
       <div
-        :if={@test_result}
+        :if={@check && not slot_given?(assigns)}
         id={"#{@id}-test-result"}
         role="status"
-        class={["alert items-start", if(@test_result.ok?, do: "alert-success", else: "alert-error")]}
+        class={["alert items-start", check_class(@check.status)]}
       >
         <div class="space-y-2">
-          <p class="font-semibold">
-            {if @test_result.ok?,
-              do: "Connection verified: the store accepted every step.",
-              else: "Connection test failed."}
-          </p>
+          <p class="font-semibold">{check_title(@check.status)}</p>
           <ol class="space-y-1 text-sm">
-            <li :for={step <- @test_result.steps} data-step={step.step} data-status={step.status}>
+            <li :for={step <- @check.steps} data-step={step.step} data-status={step.status}>
               <span aria-hidden="true">{step_mark(step.status)}</span>
-              {step_label(step.step)}: {step_outcome(step)}
+              {step.label}: {step.detail}
             </li>
           </ol>
-          <p :if={@test_result.steps == []} class="text-sm">The test could not run.</p>
-          <p :if={@test_result.leftover} class="text-sm">
-            A test object could not be removed: <code>{@test_result.leftover}</code>
+          <p :if={@check.leftover} class="text-sm">
+            A test object could not be removed: <code>{@check.leftover}</code>
           </p>
         </div>
       </div>
@@ -227,9 +287,9 @@ defmodule Defdo.Uploader.CredentialsForm do
             value="test"
             id={"#{@id}-test"}
             class="btn btn-outline"
-            disabled={@testing?}
+            disabled={@check != nil and @check.status == :running}
           >
-            {if @testing?, do: "Testing...", else: "Test Connection"}
+            {if @check != nil and @check.status == :running, do: "Testing...", else: "Test Connection"}
           </button>
           <button type="submit" class="btn btn-primary" disabled={@saving?}>
             {if @saving?, do: "Saving...", else: "Save Credentials"}
@@ -332,36 +392,21 @@ defmodule Defdo.Uploader.CredentialsForm do
   defp secret_stored?(creds), do: not blank?(Map.get(creds || %{}, :secret_access_key))
 
   # Reasons are atoms or short terms from this package; never the credentials themselves.
+  defp slot_given?(assigns), do: assigns[:check_view] not in [nil, []]
+
+  defp check_class(:passed), do: "alert-success"
+  defp check_class(:failed), do: "alert-error"
+  defp check_class(:running), do: nil
+
+  defp check_title(:passed), do: "Connection verified: the store accepted every step."
+  defp check_title(:failed), do: "Connection test failed."
+  defp check_title(:running), do: "Testing the connection…"
+
   defp step_mark(:ok), do: "✓"
   defp step_mark(:error), do: "✗"
   defp step_mark(:skipped), do: "–"
-
-  defp step_label(:connect), do: "Connect"
-  defp step_label(:write), do: "Write a test object"
-  defp step_label(:edit), do: "Edit it"
-  defp step_label(:delete), do: "Delete it"
-
-  defp step_outcome(%{status: :ok}), do: "ok"
-  defp step_outcome(%{status: :skipped}), do: "not run"
-  defp step_outcome(%{status: :error, reason: reason}), do: step_reason(reason)
-
-  defp step_reason(:missing_credentials), do: "some credentials are missing"
-
-  defp step_reason({:http_status, 403}),
-    do: "access denied (403): check the key, its permissions and the bucket"
-
-  defp step_reason({:http_status, 404}),
-    do: "not found (404): check the bucket name and the endpoint"
-
-  defp step_reason({:http_status, status}), do: "the store answered #{status}"
-
-  defp step_reason({:transport, _module}),
-    do: "the store could not be reached: check the endpoint"
-
-  defp step_reason(:content_mismatch), do: "the object read back differs from what was written"
-  defp step_reason(:still_there), do: "the object is still there after the delete"
-  defp step_reason(reason) when is_atom(reason), do: Phoenix.Naming.humanize(reason)
-  defp step_reason(_reason), do: "the request failed"
+  defp step_mark(:running), do: "…"
+  defp step_mark(:pending), do: "·"
 
   defp humanize({:error, :missing_credentials}), do: "some credentials are missing"
   defp humanize({:error, reason}) when is_atom(reason), do: Phoenix.Naming.humanize(reason)

@@ -81,6 +81,26 @@ defmodule Defdo.Uploader.ConnectionCheckTest do
     assert key =~ ~r|^/assets/\.defdo-connection-check/[0-9a-f]{16}\.txt$|
   end
 
+  test "reports each step as it starts and as it ends" do
+    store()
+    test_pid = self()
+    ConnectionCheck.run(config(), on_step: &send(test_pid, {:step, &1.step, &1.status}))
+
+    for step <- [:connect, :write, :edit, :delete] do
+      assert_received {:step, ^step, :running}
+      assert_received {:step, ^step, :ok}
+    end
+  end
+
+  test "every step has words for a host to show" do
+    for step <- ConnectionCheck.steps(), do: assert(is_binary(ConnectionCheck.label(step)))
+
+    assert ConnectionCheck.detail(%{status: :error, reason: {:http_status, 403}}) =~
+             "access denied"
+
+    assert ConnectionCheck.detail(%{status: :skipped}) == "not run"
+  end
+
   test "the probe stays inside the bucket's prefix" do
     agent = store()
     assert ConnectionCheck.run(config("assets/tenants/t1")).ok?
