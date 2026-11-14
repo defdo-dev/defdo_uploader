@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- `CredentialsForm`: Test Connection no longer raises. The button sent no form params to a clause that required them, and its result was sent to the host LiveView, which had no clause for it. It now validates the current form values and shows the result inside the component; the `{:test_connection, attrs}` message is gone (nothing handled it).
+- `CredentialsForm`: the buttons use daisyUI classes (`btn btn-primary`, `btn btn-outline`); the `bg-blue-600`/`bg-green-600` utilities were missing from host CSS, so both were invisible in the light theme.
+- `CredentialsForm`: an invalid submit shows field errors, and a failed save is reported instead of shown as saved. Region is optional: a blank region is stored as `us-east-1`, the S3 client default (`Adapters.S3.presign_get/3` and `validate_config/1` need a region).
+- `CredentialsForm`: the Secret Access Key is no longer written back into the page HTML. Leave it blank to keep the stored secret.
+
 ## 0.3.1 - 2026-10-31
 
 ### Added

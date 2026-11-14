@@ -5,6 +5,14 @@ defmodule Defdo.Uploader.CredentialsForm do
   LiveComponent that provides a complete credentials management UI:
   form fields, "Test Connection" button, save, and connection status.
 
+  Test Connection and Save work from the values currently in the form and report their
+  outcome inside the component; the host does not need to handle any message. A secret is
+  never rendered back into the HTML: the Secret Access Key input is always empty, and leaving
+  it blank on save or test keeps the stored secret.
+
+  Region is optional (S3-compatible stores such as R2 or MinIO may not use one); a blank
+  region is stored as `"us-east-1"`, the same default the S3 client uses.
+
   ## Usage
 
       <.live_component
@@ -31,13 +39,9 @@ defmodule Defdo.Uploader.CredentialsForm do
   alias Defdo.Uploader.Adapters.S3
   alias Defdo.Uploader.S3Credentials
 
-  @default_fields %{
-    "access_key_id" => nil,
-    "secret_access_key" => nil,
-    "bucket" => nil,
-    "region" => nil,
-    "endpoint" => nil
-  }
+  @default_region "us-east-1"
+  @fields ~w(access_key_id secret_access_key bucket region endpoint)
+  @required ~w(access_key_id secret_access_key bucket)
 
   @impl true
   def update(%{tenant_id: tenant_id} = assigns, socket) do
@@ -47,8 +51,10 @@ defmodule Defdo.Uploader.CredentialsForm do
      socket
      |> assign(assigns)
      |> assign(:creds, creds)
-     |> assign(:form, to_form(changeset(creds), as: "creds"))
+     |> assign(:params, stored_params(creds))
+     |> assign(:errors, %{})
      |> assign(:test_result, nil)
+     |> assign(:save_result, nil)
      |> assign(:testing?, false)
      |> assign(:saving?, false)
      |> maybe_subscribe(tenant_id)}
@@ -56,58 +62,69 @@ defmodule Defdo.Uploader.CredentialsForm do
 
   @impl true
   def handle_event("validate", %{"creds" => params}, socket) do
-    cs = changeset(params)
-    {:noreply, assign(socket, form: to_form(cs, as: "creds"))}
+    {:noreply, assign(socket, :params, clean_params(params))}
   end
 
-  def handle_event("test", %{"creds" => params}, socket) do
-    if valid?(params) do
-      attrs = normalize(params)
-      send(self(), {:test_connection, attrs})
+  # The submit button named `intent=test` is the Test Connection control. A bare `test` click
+  # (no form params) is answered from the last values the form reported.
+  def handle_event("test", %{"creds" => params}, socket),
+    do: run_test(clean_params(params), socket)
 
-      {:noreply,
-       socket
-       |> assign(:form, to_form(params_to_map(params), as: "creds"))
-       |> assign(:testing?, true)
-       |> assign(:test_result, nil)}
-    else
-      {:noreply, assign(socket, form: to_form(params_to_map(params), as: "creds"))}
+  def handle_event("test", _params, socket), do: run_test(socket.assigns.params, socket)
+
+  def handle_event("save", %{"creds" => params} = event, socket) do
+    params = clean_params(params)
+
+    if event["intent"] == "test",
+      do: run_test(params, socket),
+      else: run_save(params, socket)
+  end
+
+  def handle_event("save", _params, socket), do: run_save(socket.assigns.params, socket)
+
+  defp run_test(params, socket) do
+    socket = assign(socket, :params, params) |> assign(:save_result, nil)
+    attrs = normalize(params, socket.assigns.creds)
+
+    case errors(attrs) do
+      errors when map_size(errors) > 0 ->
+        {:noreply, socket |> assign(:errors, errors) |> assign(:test_result, nil)}
+
+      _ ->
+        result =
+          case S3.validate_config(attrs) do
+            :ok -> {:ok, %{}}
+            {:error, reason} -> {:error, reason}
+          end
+
+        {:noreply, socket |> assign(:errors, %{}) |> assign(:test_result, result)}
     end
   end
 
-  def handle_event("save", %{"creds" => params}, socket) do
-    if valid?(params) do
-      attrs = normalize(params)
-      S3Credentials.put(attrs, tenant_id: socket.assigns.tenant_id)
-      broadcast_update(socket.assigns.tenant_id)
+  defp run_save(params, socket) do
+    socket = assign(socket, :params, params) |> assign(:test_result, nil)
+    attrs = normalize(params, socket.assigns.creds)
 
-      {:noreply,
-       socket
-       |> assign(:form, to_form(params_to_map(params), as: "creds"))
-       |> assign(:saving?, false)
-       |> assign(:saved?, true)
-       |> assign(:creds, attrs)}
-    else
-      {:noreply, assign(socket, form: to_form(params_to_map(params), as: "creds"))}
+    case errors(attrs) do
+      errors when map_size(errors) > 0 ->
+        {:noreply, socket |> assign(:errors, errors) |> assign(:save_result, nil)}
+
+      _ ->
+        case S3Credentials.put(attrs, tenant_id: socket.assigns.tenant_id) do
+          :ok ->
+            broadcast_update(socket.assigns.tenant_id)
+
+            {:noreply,
+             socket
+             |> assign(:errors, %{})
+             |> assign(:creds, attrs)
+             |> assign(:params, stored_params(attrs))
+             |> assign(:save_result, :ok)}
+
+          {:error, reason} ->
+            {:noreply, socket |> assign(:errors, %{}) |> assign(:save_result, {:error, reason})}
+        end
     end
-  end
-
-  def handle_info({:test_connection, attrs}, socket) do
-    result =
-      case S3.validate_config(attrs) do
-        :ok -> {:ok, %{}}
-        {:error, reason} -> {:error, reason}
-      end
-
-    {:noreply,
-     socket
-     |> assign(:testing?, false)
-     |> assign(:test_result, result)}
-  end
-
-  def handle_info({:credentials_updated, _payload}, socket) do
-    creds = load_creds(socket.assigns.tenant_id)
-    {:noreply, assign(socket, :creds, creds)}
   end
 
   # ── Render ──────────────────────────────────────────────────────────
@@ -116,78 +133,112 @@ defmodule Defdo.Uploader.CredentialsForm do
   def render(assigns) do
     ~H"""
     <div id={@id} class="space-y-6">
-      <div :if={@test_result} class={[
-        "rounded-lg p-4 text-sm",
-        if(match?({:ok, _}, @test_result), do: "bg-green-50 text-green-800", else: "bg-red-50 text-red-800")
-      ]}>
+      <div
+        :if={@test_result}
+        id={"#{@id}-test-result"}
+        role="status"
+        class={["alert", if(match?({:ok, _}, @test_result), do: "alert-success", else: "alert-error")]}
+      >
         <%= if match?({:ok, _}, @test_result) do %>
-          <strong>Connected</strong>
-          <span :if={test_key(@test_result)}> — test key: <%= test_key(@test_result) %></span>
+          <span><strong>Connected</strong> — the credentials are complete.</span>
         <% else %>
-          <strong>Error</strong> — <%= humanize(@test_result) %>
+          <span><strong>Error</strong> — {humanize(@test_result)}</span>
         <% end %>
       </div>
 
-      <form id="creds-form" phx-change="validate" phx-submit="save" phx-target={@myself}>
+      <div
+        :if={@save_result}
+        id={"#{@id}-save-result"}
+        role="status"
+        class={["alert", if(@save_result == :ok, do: "alert-success", else: "alert-error")]}
+      >
+        <%= if @save_result == :ok do %>
+          <span>Credentials saved.</span>
+        <% else %>
+          <span><strong>Could not save</strong> — {humanize(@save_result)}</span>
+        <% end %>
+      </div>
+
+      <form id="creds-form" phx-change="validate" phx-submit="save" phx-target={@myself} novalidate>
         <div class="space-y-4">
-          <div>
-            <label for="creds_access_key_id" class="block text-sm font-medium">Access Key ID</label>
-            <input
-              type="text" name="creds[access_key_id]" id="creds_access_key_id"
-              value={@form[:access_key_id].value}
-              class="mt-1 block w-full rounded-md border px-3 py-2"
-            />
-          </div>
-          <div>
-            <label for="creds_secret_access_key" class="block text-sm font-medium">Secret Access Key</label>
-            <input
-              type="password" name="creds[secret_access_key]" id="creds_secret_access_key"
-              value={@form[:secret_access_key].value}
-              class="mt-1 block w-full rounded-md border px-3 py-2"
-            />
-          </div>
-          <div>
-            <label for="creds_bucket" class="block text-sm font-medium">Bucket</label>
-            <input
-              type="text" name="creds[bucket]" id="creds_bucket"
-              value={@form[:bucket].value}
-              class="mt-1 block w-full rounded-md border px-3 py-2"
-            />
-          </div>
-          <div>
-            <label for="creds_region" class="block text-sm font-medium">Region</label>
-            <input
-              type="text" name="creds[region]" id="creds_region"
-              value={@form[:region].value}
-              class="mt-1 block w-full rounded-md border px-3 py-2"
-            />
-          </div>
-          <div>
-            <label for="creds_endpoint" class="block text-sm font-medium">Endpoint URL</label>
-            <input
-              type="text" name="creds[endpoint]" id="creds_endpoint"
-              value={@form[:endpoint].value}
-              class="mt-1 block w-full rounded-md border px-3 py-2"
-              placeholder="https://..."
-            />
-          </div>
+          <.field id="creds_access_key_id" name="access_key_id" label="Access Key ID" params={@params} errors={@errors} />
+          <.field
+            id="creds_secret_access_key"
+            name="secret_access_key"
+            label="Secret Access Key"
+            type="password"
+            params={@params}
+            errors={@errors}
+            hint={if secret_stored?(@creds), do: "A secret is saved. Leave blank to keep it."}
+          />
+          <.field id="creds_bucket" name="bucket" label="Bucket" params={@params} errors={@errors} />
+          <.field
+            id="creds_region"
+            name="region"
+            label="Region (optional)"
+            params={@params}
+            errors={@errors}
+            hint="Leave blank for S3-compatible stores such as R2 or MinIO."
+          />
+          <.field
+            id="creds_endpoint"
+            name="endpoint"
+            label="Endpoint URL"
+            params={@params}
+            errors={@errors}
+            placeholder="https://..."
+          />
         </div>
 
         <div class="mt-4 flex gap-3">
           <button
-            type="button" phx-click="test" phx-target={@myself} disabled={@testing?}
-            class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+            type="submit"
+            name="intent"
+            value="test"
+            id={"#{@id}-test"}
+            class="btn btn-outline"
+            disabled={@testing?}
           >
-            <%= if @testing?, do: "Testing...", else: "Test Connection" %>
+            {if @testing?, do: "Testing...", else: "Test Connection"}
           </button>
-          <button
-            type="submit" disabled={@saving?}
-            class="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-          >
-            <%= if @saving?, do: "Saving...", else: "Save Credentials" %>
+          <button type="submit" class="btn btn-primary" disabled={@saving?}>
+            {if @saving?, do: "Saving...", else: "Save Credentials"}
           </button>
         </div>
       </form>
+    </div>
+    """
+  end
+
+  attr(:id, :string, required: true)
+  attr(:name, :string, required: true)
+  attr(:label, :string, required: true)
+  attr(:type, :string, default: "text")
+  attr(:params, :map, required: true)
+  attr(:errors, :map, required: true)
+  attr(:hint, :string, default: nil)
+  attr(:placeholder, :string, default: nil)
+
+  # A password input never gets a `value`: a secret is never rendered back into the HTML.
+  defp field(assigns) do
+    assigns = assign(assigns, :error, assigns.errors[assigns.name])
+
+    ~H"""
+    <div class="form-control w-full">
+      <label for={@id} class="label"><span class="label-text font-medium">{@label}</span></label>
+      <input
+        type={@type}
+        name={"creds[#{@name}]"}
+        id={@id}
+        value={if @type != "password", do: @params[@name]}
+        placeholder={@placeholder}
+        autocomplete={if @type == "password", do: "new-password", else: "off"}
+        aria-invalid={@error && "true"}
+        aria-describedby={@error && "#{@id}-error"}
+        class={["input input-bordered w-full", @error && "input-error"]}
+      />
+      <p :if={@hint} class="label text-xs opacity-70">{@hint}</p>
+      <p :if={@error} id={"#{@id}-error"} class="label text-sm text-error">{@error}</p>
     </div>
     """
   end
@@ -197,41 +248,63 @@ defmodule Defdo.Uploader.CredentialsForm do
   defp load_creds(tenant_id) do
     case S3Credentials.get(tenant_id: tenant_id) do
       {:ok, creds} -> creds
-      _ -> @default_fields
+      _ -> %{}
     end
   end
 
-  defp valid?(params) when is_map(params) do
-    required = ~w(access_key_id secret_access_key bucket region)
-    Enum.all?(required, fn k -> present?(params[k]) end)
+  # Form values for a fresh render: everything but the secret, which is never echoed.
+  defp stored_params(creds) do
+    creds = creds || %{}
+
+    Map.new(@fields -- ["secret_access_key"], fn k ->
+      {k, to_string(Map.get(creds, String.to_existing_atom(k)) || "")}
+    end)
   end
 
-  defp present?(nil), do: false
-  defp present?(""), do: false
-  defp present?(_), do: true
+  # Only known string fields are kept, trimmed; anything else in the payload is dropped.
+  defp clean_params(params) when is_map(params) do
+    Map.new(@fields, fn k ->
+      v = params[k]
+      {k, if(is_binary(v), do: String.trim(v), else: "")}
+    end)
+  end
 
-  defp normalize(params) when is_map(params) do
+  # Blank secret keeps the stored one; blank region falls back to the S3 client default.
+  defp normalize(params, stored) do
+    stored = stored || %{}
+
+    secret =
+      case params["secret_access_key"] do
+        v when v in [nil, ""] -> Map.get(stored, :secret_access_key) || ""
+        v -> v
+      end
+
     %{
       access_key_id: params["access_key_id"],
-      secret_access_key: params["secret_access_key"],
+      secret_access_key: secret,
       bucket: params["bucket"],
-      region: params["region"],
-      endpoint: params["endpoint"]
+      region: blank_to(params["region"], @default_region),
+      endpoint: blank_to(params["endpoint"], nil)
     }
   end
 
-  defp params_to_map(params) when is_map(params), do: Map.new(params, fn {k, v} -> {k, v} end)
+  defp blank_to(v, default) when v in [nil, ""], do: default
+  defp blank_to(v, _default), do: v
 
-  defp changeset(creds) do
-    data = Map.merge(@default_fields, creds || @default_fields)
-    data |> Map.new(fn {k, v} -> {k, v} end)
+  defp errors(attrs) do
+    for key <- @required, blank?(Map.get(attrs, String.to_existing_atom(key))), into: %{} do
+      {key, "can't be blank"}
+    end
   end
 
-  defp test_key({:ok, info}) when is_map(info), do: info[:test_key]
-  defp test_key(_), do: nil
+  defp blank?(v), do: v in [nil, ""]
 
-  defp humanize({:error, reason}), do: inspect(reason)
-  defp humanize(_), do: "Unknown error"
+  defp secret_stored?(creds), do: not blank?(Map.get(creds || %{}, :secret_access_key))
+
+  # Reasons are atoms or short terms from this package; never the credentials themselves.
+  defp humanize({:error, :missing_credentials}), do: "some credentials are missing"
+  defp humanize({:error, reason}) when is_atom(reason), do: Phoenix.Naming.humanize(reason)
+  defp humanize({:error, _reason}), do: "the request failed"
 
   defp broadcast_update(tenant_id) do
     if Code.ensure_loaded?(Defdo.Tenant.Boundary.PubSub) do
