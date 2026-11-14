@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.4.1 - 2026-11-14
+
+### Fixed
+
+- `CredentialsForm`: a typed Secret Access Key is no longer emptied by the next validation. Since 0.4.0 the input has no rendered `value` (the secret is never written into the HTML), so the `phx-change` patch after leaving the field cleared it and Test Connection or Save then failed with "can't be blank". The input now sits in a `phx-update="ignore"` wrapper: the browser keeps what was typed and the server still never sends a secret. Found driving the form in a real browser; a LiveView test does not see it.
+
 ## 0.4.0 - 2026-11-14
 
 ### Added

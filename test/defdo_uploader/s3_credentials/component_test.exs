@@ -165,6 +165,18 @@ defmodule Defdo.Uploader.CredentialsFormTest do
       refute has_element?(lv, "#host-check")
     end
 
+    test "the secret input is not patched by the server, so a typed secret survives validation",
+         %{lv: lv} do
+      # Found in a real browser: with no `value` rendered, the next phx-change
+      # patch emptied the field and the test or save then failed "can't be blank".
+      assert has_element?(
+               lv,
+               "#creds_secret_access_key-keep[phx-update='ignore'] input#creds_secret_access_key[type='password']"
+             )
+
+      refute has_element?(lv, "input#creds_secret_access_key[value]")
+    end
+
     test "the secret is never rendered back", %{lv: lv} do
       html =
         lv
