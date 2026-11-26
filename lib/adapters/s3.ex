@@ -6,7 +6,6 @@ defmodule Defdo.Uploader.Adapters.S3 do
   """
   @behaviour Defdo.Uploader.Adapter
 
-  require Logger
   alias Defdo.S3
   alias Req.Response
 
@@ -393,10 +392,7 @@ defmodule Defdo.Uploader.Adapters.S3 do
   defp normalize_endpoint(_endpoint), do: nil
 
   defp content_type_header(path) do
-    case MIME.from_path(path) do
-      nil -> []
-      content_type -> [{"content-type", content_type}]
-    end
+    [{"content-type", MIME.from_path(path)}]
   end
 
   defp metadata_headers(metadata) when is_map(metadata) or is_list(metadata) do

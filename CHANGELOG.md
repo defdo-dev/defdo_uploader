@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Security
+
+- `db_connection` 2.10.2 → 2.10.3 (EEF-CVE-2026-133555, HIGH).
+- `flop` 0.29.1 → 0.29.2 (EEF-CVE-2026-130411).
+
+### Changed
+
+- Lock moved to latest deps: `defdo_vault` 0.21.2 → 0.25.0, `postgrex` 0.22.4 → 0.23.0, `image` 0.73.0 → 0.74.0, `vix` 0.42.0 → 0.44.0, `color` 0.13.0 → 1.0.0, plus `ex_doc` and `lazy_html` patch bumps. `sweet_xml` dropped from the lock (no longer required).
+
 ## 0.4.1 - 2026-11-14
 
 ### Fixed
